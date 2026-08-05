@@ -94,7 +94,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне наповнення бака з аварійним вимкненням за таймером.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ low_level_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚰 Наповнення бака розпочато.\"\n  {% endif %}\n  {% endif %}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ high_level_sensor }}\n        to: \"on\"\n    timeout:\n      minutes: {{ max_run_minutes }}\n    continue_on_timeout: true\n  - service: switch.turn_off\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  - if:\n      - condition: template\n        value_template: \"{% raw %}{{ wait.completed == false }}{% endraw %}\"\n    then:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"⚠️ УВАГА! Наповнення бака зупинено за ТАЙМ-АУТОМ ({{ max_run_minutes }} хв)! Перевірте датчик або насос.\"\n    else:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"✅ Бак успішно наповнено.\"\n  {% endif %}\n"
   },
   {
     "id": "drip_irrigation_basic",
@@ -199,7 +200,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Капельний полив за розкладом із перевіркою рівня води.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\ncondition:\n  - condition: state\n    entity_id: {{ water_level_sensor }}\n    state: \"on\"\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌱 Капельний полив розпочато ({{ duration_minutes }} хв).\"\n  {% endif %}\n  {% endif %}\n  - service: switch.turn_on\n    target:\n      entity_id: {{ pump_switch }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ pump_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Капельний полив завершено.\"\n  {% endif %}\nmax_exceeded: silent\n"
   },
   {
     "id": "ph_dosing_control",
@@ -341,7 +343,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Дозування pH з лімітом циклів та паузою на перемішування.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ ph_sensor }}\n    above: {{ target_ph_max }}\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚗️ pH вище норми ({% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}). Починаю дозування.\"\n  {% endif %}\n  {% endif %}\n  - repeat:\n      count: {{ max_cycles }}\n      sequence:\n        - service: switch.turn_on\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ dose_seconds }}\n        - service: switch.turn_off\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ pause_seconds }}\n        - condition: numeric_state\n          entity_id: {{ ph_sensor }}\n          above: {{ target_ph_max }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ dosing_pump }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Дозування pH завершено. Поточний pH: {% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}.\"\n  {% endif %}\nmax_exceeded: silent\n"
   },
   {
     "id": "fertilizer_dosing",
@@ -474,7 +477,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Дозування добрив порціями із захистом від повторного запуску.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ trigger_entity }}\n    to: \"on\"\ncondition:\n  - condition: template\n    value_template: \"{% raw %}{{ (as_timestamp(now()) - as_timestamp(state_attr('automation.{% endraw %}{{ automation_title | lower | replace(' ', '_') }}{% raw %}', 'last_triggered') | default(0))) > ({% endraw %}{{ cooldown_hours }}{% raw %} * 3600) }}{% endraw %}\"\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🧪 Дозування добрив розпочато ({{ portions }} порцій по {{ dose_seconds }} сек).\"\n  {% endif %}\n  {% endif %}\n  - repeat:\n      count: {{ portions }}\n      sequence:\n        - service: switch.turn_on\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ dose_seconds }}\n        - service: switch.turn_off\n          target:\n            entity_id: {{ dosing_pump }}\n        {% if portions > 1 %}\n        - delay:\n            seconds: {{ pause_between_seconds }}\n        {% endif %}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ dosing_pump }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Дозування добрив завершено ({{ portions }} порцій).\"\n  {% endif %}\nmax_exceeded: silent\n"
   },
   {
     "id": "greenhouse_climate_master",
@@ -605,7 +609,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"Greenhouse Climate Master\"\ndescription: \"Автоматичне управління вентиляцією та зволоженням.\"\nmode: queued\ntrigger:\n  - platform: state\n    entity_id: {{ temp_sensor }}\n  - platform: state\n    entity_id: {{ humidity_sensor }}\naction:\n  - choose:\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            above: {{ target_temp + temp_hysteresis }}\n        sequence:\n          - service: \"{{ 'cover.open_cover' if 'cover.' in window_actuator else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ window_actuator }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"🌡️ Температура вище норми. Відкриваю вентиляцію.\"\n          {% endif %}\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            below: {{ target_temp - temp_hysteresis }}\n        sequence:\n          - service: \"{{ 'cover.close_cover' if 'cover.' in window_actuator else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ window_actuator }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"❄️ Температура нижче норми. Закриваю вентиляцію.\"\n          {% endif %}\n  - choose:\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ humidity_sensor }}\n            above: {{ target_humidity }}\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ dehumidifier_switch }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"💧 Вологість вище норми. Вмикаю осушувач.\"\n          {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Комплексний клімат-контроль теплиці\"\n  {% endif %}"
   },
   {
     "id": "energy_220v_telegram",
@@ -665,7 +670,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про знеструмлення (220В).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"on\"\n    to: \"off\"\n    id: \"power_off\"\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"off\"\n    to: \"on\"\n    id: \"power_on\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"power_off\"\n        sequence:\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🔴 УВАГА! Зникла напруга 220В!\"\n          {% endif %}\n      - conditions:\n          - condition: trigger\n            id: \"power_on\"\n        sequence:\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🟢 Світло є! Відновлено напругу 220В.\"\n"
   },
   {
     "id": "energy_inverter_load_shedding",
@@ -751,7 +757,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне вимкнення потужних приладів при роботі від інвертора.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ inverter_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_1 }}\n  {% if heavy_load_2 %}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Авто-вимкнення приладів при роботі від інвертора\"\n  {% endif %}"
   },
   {
     "id": "energy_night_tariff_charging",
@@ -830,7 +837,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Зарядка за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\n    id: \"start\"\n  - platform: time\n    at: \"{{ end_time }}\"\n    id: \"end\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"end\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Зарядка батарей за нічним тарифом\"\n  {% endif %}"
   },
   {
     "id": "climate_temp_ventilation",
@@ -915,7 +923,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Провітрювання за температурою.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ max_temp }}\n    id: \"too_hot\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ max_temp - 2 }}\n    id: \"cooled_down\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: \"{{ 'cover.open_cover' if 'cover.' in fan_switch else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"cooled_down\"\n        sequence:\n          - service: \"{{ 'cover.close_cover' if 'cover.' in fan_switch else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Провітрювання за температурою\"\n  {% endif %}"
   },
   {
     "id": "climate_smart_thermostat_cooldown",
@@ -1010,7 +1019,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Термостат із cooldown.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ target_temp - 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_cold\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ target_temp + 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_hot\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_cold\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ heater_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ heater_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумний термостат із захистом реле (Cooldown)\"\n  {% endif %}"
   },
   {
     "id": "security_leak_protection",
@@ -1083,7 +1093,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Авто-перекриття крана при протіканні.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Захист від протікання\"\n  {% endif %}"
   },
   {
     "id": "security_presence_simulation",
@@ -1176,7 +1187,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Імітація присутності вдома.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\ncondition: []\naction:\n  - repeat:\n      while:\n        - condition: time\n          before: \"{{ end_time }}\"\n      sequence:\n        - delay:\n            minutes: \"{% raw %}{{ range(10, 45) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_1 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_1 }}\n        {% if light_2 %}\n        - delay:\n            minutes: \"{% raw %}{{ range(5, 20) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_2 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_2 }}\n        {% endif %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_1 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_1 }}\n  {% if light_2 %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_2 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Імітація присутності вдома\"\n  {% endif %}"
   },
   {
     "id": "energy_battery_alert",
@@ -1247,7 +1259,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про низький заряд акумулятора.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ battery_sensor }}\n    below: {{ threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Заряд батареї впав нижче {{ threshold }}%!\"\n\n  {% endif %}"
   },
   {
     "id": "energy_away_mode",
@@ -1322,7 +1335,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Економія енергії, коли нікого немає вдома.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ presence_sensor }}\n    to: \"not_home\"\n    for:\n      minutes: 10\naction:\n  - service: \"{{ 'light.turn_off' if 'light.' in non_critical_switch else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ non_critical_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Економія енергії (Нікого немає вдома)\"\n  {% endif %}"
   },
   {
     "id": "energy_peak_shaving",
@@ -1405,7 +1419,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Peak shaving: вимкнення приладу при перевищенні ліміту потужності.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ total_power_sensor }}\n    above: {{ power_limit }}\n    for:\n      seconds: 30\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_switch }}\n  {% if telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚡ Перевищено ліміт потужності ({{ power_limit }}Вт). Вимкнено потужний прилад для балансування.\"\n  {% endif %}\n\n  {% endif %}"
   },
   {
     "id": "energy_inverter_solar_control",
@@ -1499,7 +1514,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Перемикання інвертора на мережу при низькому сонці.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ solar_power_sensor }}\n    below: {{ power_threshold }}\n    for:\n      minutes: 10\naction:\n  - service: select.select_option\n    target:\n      entity_id: {{ inverter_mode_select }}\n    data:\n      option: \"{{ grid_mode_option }}\"\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль генератора / сонячного інвертора\"\n  {% endif %}"
   },
   {
     "id": "irrigation_soil_moisture",
@@ -1595,7 +1611,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Полив при низькій вологості ґрунту.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ soil_sensor }}\n    below: {{ moisture_threshold }}\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ irrigation_valve }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ irrigation_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Полив за датчиком вологості ґрунту\"\n  {% endif %}"
   },
   {
     "id": "irrigation_filter_flush",
@@ -1677,7 +1694,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Щоденна промивка фільтрів води.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ flush_valve }}\n  - delay:\n      seconds: {{ flush_seconds }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ flush_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Промивка фільтрів\"\n  {% endif %}"
   },
   {
     "id": "irrigation_weather_smart",
@@ -1771,7 +1789,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Полив із перевіркою прогнозу погоди.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\ncondition:\n  - condition: template\n    value_template: \"{% raw %}{{ not ('rain' in states('{{ weather_entity }}') or 'rain' in state_attr('{{ weather_entity }}', 'forecast')[0].condition) }}{% endraw %}\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ irrigation_valve }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ irrigation_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Інтелектуальний полив (Прогноз погоди)\"\n  {% endif %}"
   },
   {
     "id": "climate_bathroom_humidity",
@@ -1867,7 +1886,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Керування витяжкою за вологістю.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ humidity_sensor }}\n    above: {{ humidity_threshold }}\naction:\n  - service: \"{{ 'fan.turn_on' if 'fan.' in exhaust_fan else 'switch.turn_on' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n  - wait_for_trigger:\n      - platform: numeric_state\n        entity_id: {{ humidity_sensor }}\n        below: {{ humidity_threshold - 5 }}\n  - delay:\n      minutes: {{ run_minutes }}\n  - service: \"{{ 'fan.turn_off' if 'fan.' in exhaust_fan else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Автоматична витяжка у ванній\"\n  {% endif %}"
   },
   {
     "id": "climate_night_setback",
@@ -1970,7 +1990,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматична зміна температури на ніч.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ night_time }}\"\n    id: \"night\"\n  - platform: time\n    at: \"{{ day_time }}\"\n    id: \"day\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"night\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ night_temp }}\n      - conditions:\n          - condition: trigger\n            id: \"day\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ day_temp }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічний режим кондиціонера/опалення\"\n  {% endif %}"
   },
   {
     "id": "climate_co2_ventilation",
@@ -2078,7 +2099,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вентиляція за рівнем CO2 із термозахистом.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\n    id: \"high_co2\"\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    below: {{ co2_threshold - 100 }}\n    id: \"low_co2\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ min_temp }}\n    id: \"too_cold\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"high_co2\"\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            above: {{ min_temp }}\n        sequence:\n          - service: \"{{ 'fan.turn_on' if 'fan.' in ventilation_fan else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"low_co2\"\n              - condition: trigger\n                id: \"too_cold\"\n        sequence:\n          - service: \"{{ 'fan.turn_off' if 'fan.' in ventilation_fan else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль CO2 та вентиляції\"\n  {% endif %}"
   },
   {
     "id": "security_open_window_alert",
@@ -2161,7 +2183,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Попередження про відкрите вікно при увімкненому кліматі.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: {{ timeout_minutes }}\ncondition:\n  - condition: not\n    conditions:\n      - condition: state\n        entity_id: {{ climate_entity }}\n        state: \"off\"\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Вікно відкрите більше {{ timeout_minutes }} хв, а клімат ({{ climate_entity }}) увімкнено! Закрийте вікно або вимкніть кондиціонер.\"\n\n  {% endif %}"
   },
   {
     "id": "security_night_light",
@@ -2276,7 +2299,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Нічна підсвітка коридору.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"on\"\ncondition:\n  - condition: time\n    after: \"{{ start_time }}\"\n    before: \"{{ end_time }}\"\naction:\n  - service: light.turn_on\n    target:\n      entity_id: {{ night_light }}\n    data:\n      brightness_pct: {{ brightness_pct }}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ motion_sensor }}\n        to: \"off\"\n        for:\n          minutes: {{ duration_minutes }}\n  - service: light.turn_off\n    target:\n      entity_id: {{ night_light }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічна підсвітка за рухом\"\n  {% endif %}"
   },
   {
     "id": "security_full_alarm",
@@ -2360,7 +2384,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Увімкнення сирени при виявленні руху в режимі охорони.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"on\"\ncondition:\n  - condition: state\n    entity_id: {{ alarm_panel }}\n    state: \"armed_away\"\naction:\n  - service: alarm_control_panel.alarm_trigger\n    target:\n      entity_id: {{ alarm_panel }}\n  - service: \"{{ 'siren.turn_on' if 'siren.' in siren_switch else 'switch.turn_on' }}\"\n    target:\n      entity_id: {{ siren_switch }}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚨 ТРИВОГА! Виявлено рух під час охорони! Увімкнено сирену.\"\n\n  {% endif %}"
   },
   {
     "id": "security_leak_complex",
@@ -2445,7 +2470,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Комплексне реагування на протікання води (Кран + Голос + Telegram).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n  - service: tts.google_translate_say\n    target:\n      entity_id: {{ media_player }}\n    data:\n      message: \"Увага! Виявлено протікання води. Кран автоматично перекрито.\"\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌊 АВАРІЯ! Виявлено протікання води! Водопостачання перекрито.\"\n\n  {% endif %}"
   },
   {
     "id": "energy_blackout_monitor",
@@ -2517,7 +2543,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Моніторинг стану мережі та відправка сповіщень.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_status_sensor }}\naction:\n  - choose:\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"off\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🚨 Блекаут! Електропостачання вимкнено. {% if ups_battery_sensor %}Заряд батареї: {{ '{{' }} states('{{ ups_battery_sensor }}') {{ '}}' }}%{% endif %}\"\n          {% endif %}\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"on\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"💡 Світло з'явилося! Електропостачання відновлено.\"\n          {% endif %}"
   },
   {
     "id": "energy_dynamic_charging",
@@ -2608,7 +2635,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Динамічна зарядка акумуляторів / станцій за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ tariff_start }}\"\n    id: \"start_tariff\"\n  - platform: time\n    at: \"{{ tariff_end }}\"\n    id: \"end_tariff\"\n  - platform: numeric_state\n    entity_id: {{ battery_level_sensor }}\n    above: 99\n    id: \"full_battery\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start_tariff\"\n          - condition: numeric_state\n            entity_id: {{ battery_level_sensor }}\n            below: 100\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"end_tariff\"\n              - condition: trigger\n                id: \"full_battery\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Динамічна зарядка за нічним тарифом\"\n  {% endif %}"
   },
   {
     "id": "climate_smart_presence",
@@ -2701,7 +2729,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вимкнення клімату при відкритому вікні або відсутності людей.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: 2\n    id: \"window_open\"\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"off\"\n    for:\n      minutes: {{ no_motion_minutes }}\n    id: \"no_motion\"\naction:\n  - choose:\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"window_open\"\n              - condition: trigger\n                id: \"no_motion\"\n        sequence:\n          - service: climate.turn_off\n            target:\n              entity_id: {{ climate_entity }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумне керування кліматом (присутність і вікна)\"\n  {% endif %}"
   },
   {
     "id": "security_auto_leak",
@@ -2773,7 +2802,8 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Захист від протікання води (перекриття крана).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚨 АВАРІЯ! Виявлено протікання води! Воду автоматично перекрито.\"\n\n  {% endif %}"
   },
   {
     "id": "climate_co2_notify",
@@ -2842,6 +2872,7 @@
           }
         }
       ]
-    }
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про високий рівень CO2.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌬️ Увага! Рівень CO2 перевищив норму ({% raw %}{{ states('{{ co2_sensor }}') }}{% endraw %} ppm). Рекомендується провітрити приміщення.\"\n\n  {% endif %}"
   }
 ]
