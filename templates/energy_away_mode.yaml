@@ -1,0 +1,73 @@
+id: energy_away_mode
+category: energy
+tier: free
+title:
+  uk: Економія енергії (Нікого немає вдома)
+  en: Away Mode Energy Savings
+description:
+  uk: Автоматично вимикає некритичні прилади (розетки, обігрівачі), коли всі йдуть
+    з дому.
+  en: Automatically turns off non-critical appliances when everyone leaves home.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Вимкнення приладів (Away)
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: presence_sensor
+      type: entity_id
+      allowed_domains:
+        - person
+        - device_tracker
+        - group
+      required: true
+      label:
+        uk: Датчик присутності
+        en: Presence Sensor
+    - id: non_critical_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+        - light
+        - climate
+      required: true
+      label:
+        uk: Прилад для вимкнення
+        en: Appliance to turn off
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Економія енергії, коли нікого немає вдома."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ presence_sensor }}
+      to: "not_home"
+      for:
+        minutes: 10
+  action:
+    - service: "{{ 'light.turn_off' if 'light.' in non_critical_switch else 'switch.turn_off' }}"
+      target:
+        entity_id: {{ non_critical_switch }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Економія енергії (Нікого немає вдома)"
+    {% endif %}

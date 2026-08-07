@@ -1,0 +1,106 @@
+id: security_presence_simulation
+category: security
+tier: pro_only
+title:
+  uk: Імітація присутності вдома
+  en: Presence Simulation
+description:
+  uk: Випадкове увімкнення та вимкнення світла ввечері, щоб створити ілюзію присутності
+    людей вдома.
+  en: Randomly toggles lights in the evening to create an illusion that someone is
+    at home.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Імітація присутності
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: light_1
+      type: entity_id
+      allowed_domains:
+        - light
+        - switch
+      required: true
+      label:
+        uk: Світло 1 (наприклад, вітальня)
+        en: Light 1 (e.g. Living Room)
+    - id: light_2
+      type: entity_id
+      allowed_domains:
+        - light
+        - switch
+      required: false
+      label:
+        uk: Світло 2 (опціонально)
+        en: Light 2 (Optional)
+    - id: start_time
+      type: time
+      required: true
+      default: '18:00:00'
+      label:
+        uk: Час початку симуляції
+        en: Simulation Start Time
+    - id: end_time
+      type: time
+      required: true
+      default: '23:00:00'
+      label:
+        uk: Час завершення
+        en: Simulation End Time
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Імітація присутності вдома."
+  mode: restart
+  trigger:
+    - platform: time
+      at: "{{ start_time }}"
+  condition: []
+  action:
+    - repeat:
+        while:
+          - condition: time
+            before: "{{ end_time }}"
+        sequence:
+          - delay:
+              minutes: "{% raw %}{{ range(10, 45) | random }}{% endraw %}"
+          - service: "{{ 'light.toggle' if 'light.' in light_1 else 'switch.toggle' }}"
+            target:
+              entity_id: {{ light_1 }}
+          {% if light_2 %}
+          - delay:
+              minutes: "{% raw %}{{ range(5, 20) | random }}{% endraw %}"
+          - service: "{{ 'light.toggle' if 'light.' in light_2 else 'switch.toggle' }}"
+            target:
+              entity_id: {{ light_2 }}
+          {% endif %}
+    - service: "{{ 'light.turn_off' if 'light.' in light_1 else 'switch.turn_off' }}"
+      target:
+        entity_id: {{ light_1 }}
+    {% if light_2 %}
+    - service: "{{ 'light.turn_off' if 'light.' in light_2 else 'switch.turn_off' }}"
+      target:
+        entity_id: {{ light_2 }}
+    {% endif %}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Імітація присутності вдома"
+    {% endif %}

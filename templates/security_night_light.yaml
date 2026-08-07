@@ -1,0 +1,113 @@
+id: security_night_light
+category: security
+tier: free
+title:
+  uk: Нічна підсвітка за рухом
+  en: Motion Night Light
+description:
+  uk: Вмикає м'яке світло вночі при виявленні руху.
+  en: Turns on dim light at night when motion is detected.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Нічна підсвітка
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: motion_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик руху
+        en: Motion Sensor
+    - id: night_light
+      type: entity_id
+      allowed_domains:
+        - light
+      required: true
+      label:
+        uk: Лампа (з підтримкою яскравості)
+        en: Light (dimmable)
+    - id: brightness_pct
+      type: number
+      required: true
+      min: 1
+      max: 100
+      default: 15
+      label:
+        uk: Яскравість (%)
+        en: Brightness (%)
+    - id: start_time
+      type: time
+      required: true
+      default: '23:00:00'
+      label:
+        uk: Початок нічного часу
+        en: Night Time Start
+    - id: end_time
+      type: time
+      required: true
+      default: 06:00:00
+      label:
+        uk: Кінець нічного часу
+        en: Night Time End
+    - id: duration_minutes
+      type: number
+      required: true
+      min: 1
+      max: 30
+      default: 3
+      label:
+        uk: Час роботи світла (хв)
+        en: Light duration (min)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Нічна підсвітка коридору."
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id: {{ motion_sensor }}
+      to: "on"
+  condition:
+    - condition: time
+      after: "{{ start_time }}"
+      before: "{{ end_time }}"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: {{ night_light }}
+      data:
+        brightness_pct: {{ brightness_pct }}
+    - wait_for_trigger:
+        - platform: state
+          entity_id: {{ motion_sensor }}
+          to: "off"
+          for:
+            minutes: {{ duration_minutes }}
+    - service: light.turn_off
+      target:
+        entity_id: {{ night_light }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Нічна підсвітка за рухом"
+    {% endif %}

@@ -1,0 +1,88 @@
+id: energy_night_tariff_charging
+category: energy
+tier: pro_only
+title:
+  uk: Зарядка батарей за нічним тарифом
+  en: Battery Charging on Night Tariff
+description:
+  uk: Оптимізація зарядки батареї/електромобіля за нічним тарифом (наприклад, 23:00
+    - 07:00).
+  en: Optimizes battery/EV charging during night tariff hours.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Нічний тариф
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: charger_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле зарядного пристрою
+        en: Charger Relay
+    - id: start_time
+      type: time
+      required: true
+      default: '23:00:00'
+      label:
+        uk: Час початку (вмикання)
+        en: Start Time (Turn ON)
+    - id: end_time
+      type: time
+      required: true
+      default: 07:00:00
+      label:
+        uk: Час завершення (вимикання)
+        en: End Time (Turn OFF)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Зарядка за нічним тарифом."
+  mode: restart
+  trigger:
+    - platform: time
+      at: "{{ start_time }}"
+      id: "start"
+    - platform: time
+      at: "{{ end_time }}"
+      id: "end"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "start"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: {{ charger_switch }}
+        - conditions:
+            - condition: trigger
+              id: "end"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: {{ charger_switch }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Зарядка батарей за нічним тарифом"
+    {% endif %}

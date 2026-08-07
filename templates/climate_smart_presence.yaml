@@ -1,0 +1,100 @@
+id: climate_smart_presence
+category: climate
+tier: free
+title:
+  uk: Розумне керування кліматом (присутність і вікна)
+  en: Smart Climate Control (Presence & Windows)
+description:
+  uk: Вимкнення клімату, якщо вікно відкрите більше 2 хвилин, або якщо в кімнаті немає
+    руху.
+  en: Turns off climate if window is open for 2 mins or no presence detected.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Смарт Клімат Контроль
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: climate_entity
+      type: entity_id
+      allowed_domains:
+        - climate
+      required: true
+      label:
+        uk: Кондиціонер / Термостат
+        en: Air Conditioner / Thermostat
+    - id: window_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик вікна
+        en: Window Sensor
+    - id: motion_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик руху
+        en: Motion Sensor
+    - id: no_motion_minutes
+      type: number
+      required: true
+      default: 30
+      label:
+        uk: Таймаут відсутності руху (хв)
+        en: No Motion Timeout (mins)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Вимкнення клімату при відкритому вікні або відсутності людей."
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id: {{ window_sensor }}
+      to: "on"
+      for:
+        minutes: 2
+      id: "window_open"
+    - platform: state
+      entity_id: {{ motion_sensor }}
+      to: "off"
+      for:
+        minutes: {{ no_motion_minutes }}
+      id: "no_motion"
+  action:
+    - choose:
+        - conditions:
+            - condition: or
+              conditions:
+                - condition: trigger
+                  id: "window_open"
+                - condition: trigger
+                  id: "no_motion"
+          sequence:
+            - service: climate.turn_off
+              target:
+                entity_id: {{ climate_entity }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Розумне керування кліматом (присутність і вікна)"
+    {% endif %}

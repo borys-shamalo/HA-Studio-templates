@@ -1,0 +1,81 @@
+id: security_open_window_alert
+category: security
+tier: free
+title:
+  uk: Нагадування про відкрите вікно
+  en: Open Window Reminder
+description:
+  uk: Надсилає сповіщення, якщо вікно або двері відкриті занадто довго під час роботи
+    кондиціонера.
+  en: Sends an alert if a window or door is left open while the AC/heater is running.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Відкрите вікно
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: window_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик вікна/дверей
+        en: Window/Door Sensor
+    - id: climate_entity
+      type: entity_id
+      allowed_domains:
+        - climate
+      required: true
+      label:
+        uk: Кондиціонер / Опалення
+        en: Climate / HVAC Entity
+    - id: timeout_minutes
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 5
+      label:
+        uk: Таймаут до сповіщення (хв)
+        en: Timeout before alert (min)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Попередження про відкрите вікно при увімкненому кліматі."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ window_sensor }}
+      to: "on"
+      for:
+        minutes: {{ timeout_minutes }}
+  condition:
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: {{ climate_entity }}
+          state: "off"
+  action:
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "⚠️ УВАГА! Вікно відкрите більше {{ timeout_minutes }} хв, а клімат ({{ climate_entity }}) увімкнено! Закрийте вікно або вимкніть кондиціонер."
+
+    {% endif %}

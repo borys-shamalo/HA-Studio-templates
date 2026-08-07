@@ -1,0 +1,81 @@
+id: energy_blackout_monitor
+category: energy
+tier: free
+title:
+  uk: Система сповіщень про блекаути / вимкнення світла
+  en: Blackout / Power Outage Monitor
+description:
+  uk: Моніторинг стану мережі/UPS та відправка сповіщень у Telegram із вказуванням
+    часу роботи від батареї.
+  en: Monitors grid/UPS status and sends Telegram alerts with battery time.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Сповіщення про блекаут
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: grid_status_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик наявності 220В
+        en: Grid Status Sensor (220V)
+    - id: ups_battery_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: false
+      label:
+        uk: Датчик заряду UPS (%)
+        en: UPS Battery Level (%)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Моніторинг стану мережі та відправка сповіщень."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ grid_status_sensor }}
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: {{ grid_status_sensor }}
+              state: "off"
+          sequence:
+            - delay: '00:00:01'
+            {% if enable_telegram %}
+            - service: {{ telegram_notify_service }}
+              data:
+                message: "🚨 Блекаут! Електропостачання вимкнено. {% if ups_battery_sensor %}Заряд батареї: {{ '{{' }} states('{{ ups_battery_sensor }}') {{ '}}' }}%{% endif %}"
+            {% endif %}
+        - conditions:
+            - condition: state
+              entity_id: {{ grid_status_sensor }}
+              state: "on"
+          sequence:
+            - delay: '00:00:01'
+            {% if enable_telegram %}
+            - service: {{ telegram_notify_service }}
+              data:
+                message: "💡 Світло з'явилося! Електропостачання відновлено."
+            {% endif %}

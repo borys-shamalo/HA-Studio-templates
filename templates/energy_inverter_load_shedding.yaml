@@ -1,0 +1,84 @@
+id: energy_inverter_load_shedding
+category: energy
+tier: pro_only
+title:
+  uk: Авто-вимкнення приладів при роботі від інвертора
+  en: Auto-Disable Heavy Loads on Inverter Power
+description:
+  uk: Автоматично вимикає бойлер, кондиціонер чи інші потужні прилади, коли зникає
+    мережа і вмикається інвертор.
+  en: Automatically turns off heavy appliances like boilers and ACs when switching
+    to inverter power.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Економія інвертора
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: inverter_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик роботи інвертора (ON = від батареї)
+        en: Inverter Status Sensor (ON = battery mode)
+    - id: heavy_load_1
+      type: entity_id
+      allowed_domains:
+        - switch
+        - climate
+      required: true
+      label:
+        uk: Потужний прилад 1 (Бойлер)
+        en: Heavy Load 1 (Boiler)
+    - id: heavy_load_2
+      type: entity_id
+      allowed_domains:
+        - switch
+        - climate
+      required: false
+      label:
+        uk: Потужний прилад 2 (Опціонально)
+        en: Heavy Load 2 (Optional)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Автоматичне вимкнення потужних приладів при роботі від інвертора."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ inverter_sensor }}
+      to: "on"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: {{ heavy_load_1 }}
+    {% if heavy_load_2 %}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ heavy_load_2 }}
+    {% endif %}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Авто-вимкнення приладів при роботі від інвертора"
+    {% endif %}

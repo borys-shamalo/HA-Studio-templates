@@ -1,0 +1,140 @@
+id: fertilizer_dosing
+category: irrigation
+tier: pack_only
+title:
+  uk: Дозування добрив порціями
+  en: Fertilizer Dosing in Portions with Re-run Protection
+description:
+  uk: Подає добрива порціями з паузами між ними, захистом від повторного запуску (cooldown)
+    та аварійним тайм-аутом.
+  en: Doses fertilizer in portions with pauses, cooldown re-run protection, and emergency
+    safety timeout.
+form_schema:
+  fields:
+    - id: automation_title
+      type: string
+      required: true
+      default: Дозування добрив порціями
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: dosing_pump
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле дозуючого насоса
+        en: Dosing Pump Switch
+    - id: trigger_entity
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+        - switch
+        - input_boolean
+      required: true
+      label:
+        uk: Тригер-сутність (вмикає дозування)
+        en: Trigger Entity (starts dosing)
+    - id: dose_seconds
+      type: number
+      required: true
+      min: 1
+      max: 120
+      default: 10
+      label:
+        uk: Тривалість однієї порції (секунди)
+        en: Single Portion Duration (seconds)
+    - id: portions
+      type: number
+      required: true
+      min: 1
+      max: 10
+      default: 3
+      label:
+        uk: Кількість порцій
+        en: Number of Portions
+    - id: pause_between_seconds
+      type: number
+      required: true
+      min: 10
+      max: 300
+      default: 60
+      label:
+        uk: Пауза між порціями (секунди)
+        en: Pause Between Portions (seconds)
+    - id: cooldown_hours
+      type: number
+      required: true
+      min: 1
+      max: 48
+      default: 12
+      label:
+        uk: Cooldown — мін. інтервал між запусками (години)
+        en: Cooldown — Minimum Interval Between Runs (hours)
+    - id: max_run_minutes
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 15
+      label:
+        uk: Аварійний тайм-аут (хвилини)
+        en: Safety Timeout (minutes)
+    - id: enable_telegram
+      type: boolean
+      default: true
+      label:
+        uk: Надсилати сповіщення у Telegram
+        en: Send Telegram Notification
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service Name
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Дозування добрив порціями із захистом від повторного запуску."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ trigger_entity }}
+      to: "on"
+  condition:
+    - condition: template
+      value_template: "{% raw %}{{ (as_timestamp(now()) - as_timestamp(state_attr('automation.{% endraw %}{{ automation_title | lower | replace(' ', '_') }}{% raw %}', 'last_triggered') | default(0))) > ({% endraw %}{{ cooldown_hours }}{% raw %} * 3600) }}{% endraw %}"
+  action:
+    {% if enable_telegram and telegram_notify_service %}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🧪 Дозування добрив розпочато ({{ portions }} порцій по {{ dose_seconds }} сек)."
+    {% endif %}
+    {% endif %}
+    - repeat:
+        count: {{ portions }}
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: {{ dosing_pump }}
+          - delay:
+              seconds: {{ dose_seconds }}
+          - service: switch.turn_off
+            target:
+              entity_id: {{ dosing_pump }}
+          {% if portions > 1 %}
+          - delay:
+              seconds: {{ pause_between_seconds }}
+          {% endif %}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ dosing_pump }}
+    {% if enable_telegram and telegram_notify_service %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "✅ Дозування добрив завершено ({{ portions }} порцій)."
+    {% endif %}
+  max_exceeded: silent

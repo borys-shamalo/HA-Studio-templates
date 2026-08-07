@@ -1,86 +1,85 @@
 [
   {
-    "id": "tank_guard_basic",
-    "category": "irrigation",
+    "id": "climate_bathroom_humidity",
+    "category": "climate",
     "tier": "free",
     "title": {
-      "uk": "Наповнення бака з захистом та тайм-аутом",
-      "en": "Water Tank Filling with Safety Timeout"
+      "uk": "Автоматична витяжка у ванній",
+      "en": "Automatic Bathroom Exhaust Fan"
     },
     "description": {
-      "uk": "Автоматично вмикає клапан/насос подачі води за нижнім датчиком рівня та вимикає за верхнім з аварійним тайм-аутом.",
-      "en": "Automatically turns on filling valve/pump via low sensor and off via high sensor with emergency timeout protection."
+      "uk": "Вмикає витяжку при підвищенні вологості та автоматично вимикає за таймером.",
+      "en": "Turns on exhaust fan on high humidity and turns off automatically on a timer."
     },
     "form_schema": {
       "fields": [
         {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Автоматика наповнення бака",
+          "default": "Витяжка у ванній",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "valve_switch",
+          "id": "humidity_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик вологості (%)",
+            "en": "Humidity Sensor (%)"
+          }
+        },
+        {
+          "id": "humidity_threshold",
+          "type": "number",
+          "required": true,
+          "min": 40,
+          "max": 100,
+          "default": 70,
+          "label": {
+            "uk": "Поріг вмикання (%)",
+            "en": "Activation Threshold (%)"
+          }
+        },
+        {
+          "id": "exhaust_fan",
           "type": "entity_id",
           "allowed_domains": [
             "switch",
-            "valve"
+            "fan"
           ],
           "required": true,
           "label": {
-            "uk": "Реле клапана або насоса",
-            "en": "Valve or Pump Relay Switch"
+            "uk": "Вентилятор (Витяжка)",
+            "en": "Exhaust Fan"
           }
         },
         {
-          "id": "low_level_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик нижнього (критичного) рівня",
-            "en": "Low Level Water Sensor"
-          }
-        },
-        {
-          "id": "high_level_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик верхнього (повного) рівня",
-            "en": "High Level Water Sensor"
-          }
-        },
-        {
-          "id": "max_run_minutes",
+          "id": "run_minutes",
           "type": "number",
           "required": true,
           "min": 1,
-          "max": 300,
-          "default": 30,
+          "max": 60,
+          "default": 15,
           "label": {
-            "uk": "Максимальний час наповнення (хвилини)",
-            "en": "Max Fill Duration Timeout (minutes)"
-          }
-        },
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "default": true,
-          "label": {
-            "uk": "Надсилати сповіщення у Telegram",
-            "en": "Send Telegram Notification"
+            "uk": "Час роботи після падіння вологості (хв)",
+            "en": "Run time after humidity drops (min)"
           }
         },
         {
@@ -90,12 +89,571 @@
           "default": "notify.telegram",
           "label": {
             "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service Name"
+            "en": "Telegram Notify Service"
           }
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне наповнення бака з аварійним вимкненням за таймером.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ low_level_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚰 Наповнення бака розпочато.\"\n  {% endif %}\n  {% endif %}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ high_level_sensor }}\n        to: \"on\"\n    timeout:\n      minutes: {{ max_run_minutes }}\n    continue_on_timeout: true\n  - service: switch.turn_off\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  - if:\n      - condition: template\n        value_template: \"{% raw %}{{ wait.completed == false }}{% endraw %}\"\n    then:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"⚠️ УВАГА! Наповнення бака зупинено за ТАЙМ-АУТОМ ({{ max_run_minutes }} хв)! Перевірте датчик або насос.\"\n    else:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"✅ Бак успішно наповнено.\"\n  {% endif %}\n"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Керування витяжкою за вологістю.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ humidity_sensor }}\n    above: {{ humidity_threshold }}\naction:\n  - service: \"{{ 'fan.turn_on' if 'fan.' in exhaust_fan else 'switch.turn_on' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n  - wait_for_trigger:\n      - platform: numeric_state\n        entity_id: {{ humidity_sensor }}\n        below: {{ humidity_threshold - 5 }}\n  - delay:\n      minutes: {{ run_minutes }}\n  - service: \"{{ 'fan.turn_off' if 'fan.' in exhaust_fan else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Автоматична витяжка у ванній\"\n  {% endif %}"
+  },
+  {
+    "id": "climate_co2_notify",
+    "category": "climate",
+    "tier": "free",
+    "title": {
+      "uk": "Сповіщення про необхідність провітрювання",
+      "en": "CO2 Ventilation Notification"
+    },
+    "description": {
+      "uk": "Індикація або сповіщення, коли рівень CO₂ перевищує 1000 ppm.",
+      "en": "Indication or notification when CO2 levels exceed 1000 ppm."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Моніторинг CO2",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "co2_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик CO2",
+            "en": "CO2 Sensor"
+          }
+        },
+        {
+          "id": "co2_threshold",
+          "type": "number",
+          "required": true,
+          "default": 1000,
+          "label": {
+            "uk": "Поріг CO2 (ppm)",
+            "en": "CO2 Threshold (ppm)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про високий рівень CO2.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌬️ Увага! Рівень CO2 перевищив норму ({% raw %}{{ states('{{ co2_sensor }}') }}{% endraw %} ppm). Рекомендується провітрити приміщення.\"\n\n  {% endif %}"
+  },
+  {
+    "id": "climate_co2_ventilation",
+    "category": "climate",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Контроль CO2 та вентиляції",
+      "en": "CO2 & Ventilation Control"
+    },
+    "description": {
+      "uk": "Вмикає приточну вентиляцію при підвищенні CO2 із захистом від сильного охолодження кімнати.",
+      "en": "Turns on fresh air ventilation on high CO2, with protection against overcooling the room."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Контроль якості повітря (CO2)",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "co2_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик CO2 (ppm)",
+            "en": "CO2 Sensor (ppm)"
+          }
+        },
+        {
+          "id": "co2_threshold",
+          "type": "number",
+          "required": true,
+          "min": 400,
+          "max": 2000,
+          "default": 800,
+          "label": {
+            "uk": "Поріг CO2 (ppm)",
+            "en": "CO2 Threshold (ppm)"
+          }
+        },
+        {
+          "id": "ventilation_fan",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "fan"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Вентиляція / Бризер",
+            "en": "Ventilation / Fresh Air Fan"
+          }
+        },
+        {
+          "id": "temp_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик температури в кімнаті",
+            "en": "Room Temperature Sensor"
+          }
+        },
+        {
+          "id": "min_temp",
+          "type": "number",
+          "required": true,
+          "min": 10,
+          "max": 30,
+          "default": 18,
+          "label": {
+            "uk": "Мінімальна дозволена температура (°C)",
+            "en": "Minimum Allowed Temperature (°C)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вентиляція за рівнем CO2 із термозахистом.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\n    id: \"high_co2\"\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    below: {{ co2_threshold - 100 }}\n    id: \"low_co2\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ min_temp }}\n    id: \"too_cold\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"high_co2\"\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            above: {{ min_temp }}\n        sequence:\n          - service: \"{{ 'fan.turn_on' if 'fan.' in ventilation_fan else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"low_co2\"\n              - condition: trigger\n                id: \"too_cold\"\n        sequence:\n          - service: \"{{ 'fan.turn_off' if 'fan.' in ventilation_fan else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль CO2 та вентиляції\"\n  {% endif %}"
+  },
+  {
+    "id": "climate_night_setback",
+    "category": "climate",
+    "tier": "free",
+    "title": {
+      "uk": "Нічний режим кондиціонера/опалення",
+      "en": "Night Setback for HVAC"
+    },
+    "description": {
+      "uk": "Автоматично змінює цільову температуру на нічну та повертає на денну зранку.",
+      "en": "Automatically changes target temperature for night and restores it in the morning."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Нічний клімат",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "climate_entity",
+          "type": "entity_id",
+          "allowed_domains": [
+            "climate"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Термостат/Кондиціонер",
+            "en": "Climate Entity"
+          }
+        },
+        {
+          "id": "night_time",
+          "type": "time",
+          "required": true,
+          "default": "22:30:00",
+          "label": {
+            "uk": "Час увімкнення нічного режиму",
+            "en": "Night Mode Start Time"
+          }
+        },
+        {
+          "id": "night_temp",
+          "type": "number",
+          "required": true,
+          "min": 10,
+          "max": 30,
+          "default": 19,
+          "label": {
+            "uk": "Нічна температура (°C)",
+            "en": "Night Temperature (°C)"
+          }
+        },
+        {
+          "id": "day_time",
+          "type": "time",
+          "required": true,
+          "default": "07:00:00",
+          "label": {
+            "uk": "Час повернення до денного режиму",
+            "en": "Day Mode Start Time"
+          }
+        },
+        {
+          "id": "day_temp",
+          "type": "number",
+          "required": true,
+          "min": 10,
+          "max": 30,
+          "default": 22,
+          "label": {
+            "uk": "Денна температура (°C)",
+            "en": "Day Temperature (°C)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматична зміна температури на ніч.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ night_time }}\"\n    id: \"night\"\n  - platform: time\n    at: \"{{ day_time }}\"\n    id: \"day\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"night\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ night_temp }}\n      - conditions:\n          - condition: trigger\n            id: \"day\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ day_temp }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічний режим кондиціонера/опалення\"\n  {% endif %}"
+  },
+  {
+    "id": "climate_smart_presence",
+    "category": "climate",
+    "tier": "free",
+    "title": {
+      "uk": "Розумне керування кліматом (присутність і вікна)",
+      "en": "Smart Climate Control (Presence & Windows)"
+    },
+    "description": {
+      "uk": "Вимкнення клімату, якщо вікно відкрите більше 2 хвилин, або якщо в кімнаті немає руху.",
+      "en": "Turns off climate if window is open for 2 mins or no presence detected."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Смарт Клімат Контроль",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "climate_entity",
+          "type": "entity_id",
+          "allowed_domains": [
+            "climate"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Кондиціонер / Термостат",
+            "en": "Air Conditioner / Thermostat"
+          }
+        },
+        {
+          "id": "window_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик вікна",
+            "en": "Window Sensor"
+          }
+        },
+        {
+          "id": "motion_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик руху",
+            "en": "Motion Sensor"
+          }
+        },
+        {
+          "id": "no_motion_minutes",
+          "type": "number",
+          "required": true,
+          "default": 30,
+          "label": {
+            "uk": "Таймаут відсутності руху (хв)",
+            "en": "No Motion Timeout (mins)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вимкнення клімату при відкритому вікні або відсутності людей.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: 2\n    id: \"window_open\"\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"off\"\n    for:\n      minutes: {{ no_motion_minutes }}\n    id: \"no_motion\"\naction:\n  - choose:\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"window_open\"\n              - condition: trigger\n                id: \"no_motion\"\n        sequence:\n          - service: climate.turn_off\n            target:\n              entity_id: {{ climate_entity }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумне керування кліматом (присутність і вікна)\"\n  {% endif %}"
+  },
+  {
+    "id": "climate_smart_thermostat_cooldown",
+    "category": "climate",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Розумний термостат із захистом реле (Cooldown)",
+      "en": "Smart Thermostat with Relay Protection"
+    },
+    "description": {
+      "uk": "Керує обігрівом із захистом від занадто частого перемикання (cooldown) для продовження терміну служби реле.",
+      "en": "Controls heating with a cooldown mechanism to prevent rapid relay toggling."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Розумний термостат",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "temp_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик температури",
+            "en": "Temperature Sensor"
+          }
+        },
+        {
+          "id": "heater_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Реле обігрівача",
+            "en": "Heater Switch"
+          }
+        },
+        {
+          "id": "target_temp",
+          "type": "number",
+          "required": true,
+          "min": 5,
+          "max": 35,
+          "default": 22,
+          "label": {
+            "uk": "Цільова температура (°C)",
+            "en": "Target Temperature (°C)"
+          }
+        },
+        {
+          "id": "cooldown_minutes",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 60,
+          "default": 5,
+          "label": {
+            "uk": "Мінімальний час між перемиканнями (хв)",
+            "en": "Minimum time between toggles (min)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Термостат із cooldown.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ target_temp - 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_cold\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ target_temp + 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_hot\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_cold\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ heater_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ heater_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумний термостат із захистом реле (Cooldown)\"\n  {% endif %}"
+  },
+  {
+    "id": "climate_temp_ventilation",
+    "category": "climate",
+    "tier": "free",
+    "title": {
+      "uk": "Провітрювання за температурою",
+      "en": "Temperature-based Ventilation"
+    },
+    "description": {
+      "uk": "Вмикає витяжку або відкриває кватирку, якщо температура перевищує заданий поріг.",
+      "en": "Turns on exhaust fan or opens a window if temperature exceeds a certain threshold."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Провітрювання",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "temp_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик температури",
+            "en": "Temperature Sensor"
+          }
+        },
+        {
+          "id": "fan_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "fan",
+            "cover"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Витяжка або кватирка",
+            "en": "Fan or Window Cover"
+          }
+        },
+        {
+          "id": "max_temp",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "max": 100,
+          "default": 25,
+          "label": {
+            "uk": "Максимальна температура (°C)",
+            "en": "Max Temperature (°C)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Провітрювання за температурою.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ max_temp }}\n    id: \"too_hot\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ max_temp - 2 }}\n    id: \"cooled_down\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: \"{{ 'cover.open_cover' if 'cover.' in fan_switch else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"cooled_down\"\n        sequence:\n          - service: \"{{ 'cover.close_cover' if 'cover.' in fan_switch else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Провітрювання за температурою\"\n  {% endif %}"
   },
   {
     "id": "drip_irrigation_basic",
@@ -204,132 +762,50 @@
     "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Капельний полив за розкладом із перевіркою рівня води.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\ncondition:\n  - condition: state\n    entity_id: {{ water_level_sensor }}\n    state: \"on\"\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌱 Капельний полив розпочато ({{ duration_minutes }} хв).\"\n  {% endif %}\n  {% endif %}\n  - service: switch.turn_on\n    target:\n      entity_id: {{ pump_switch }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ pump_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Капельний полив завершено.\"\n  {% endif %}\nmax_exceeded: silent\n"
   },
   {
-    "id": "ph_dosing_control",
-    "category": "irrigation",
-    "tier": "pack_only",
+    "id": "energy_220v_telegram",
+    "category": "energy",
+    "tier": "free",
     "title": {
-      "uk": "Дозування pH з лімітом циклів",
-      "en": "pH Dosing with Cycle Limit and Mixing Pause"
+      "uk": "Сповіщення про знеструмлення (220В)",
+      "en": "220V Power Outage Notification"
     },
     "description": {
-      "uk": "Дозує pH-розчин порціями з паузою на перемішування, лімітом циклів та аварійним вимкненням при перевищенні часу.",
-      "en": "Doses pH solution in portions with mixing pauses, cycle limit, and emergency shutdown on timeout."
+      "uk": "Надсилає повідомлення у Telegram при зникненні та відновленні напруги 220В.",
+      "en": "Sends Telegram notifications when 220V grid power is lost and restored."
     },
     "form_schema": {
       "fields": [
         {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Дозування pH",
+          "default": "Контроль напруги 220В",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "ph_sensor",
+          "id": "grid_sensor",
           "type": "entity_id",
           "allowed_domains": [
+            "binary_sensor",
             "sensor"
           ],
           "required": true,
           "label": {
-            "uk": "Датчик pH",
-            "en": "pH Sensor"
-          }
-        },
-        {
-          "id": "dosing_pump",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Реле дозуючого насоса",
-            "en": "Dosing Pump Switch"
-          }
-        },
-        {
-          "id": "target_ph_min",
-          "type": "number",
-          "required": true,
-          "min": 4.0,
-          "max": 7.0,
-          "default": 5.8,
-          "label": {
-            "uk": "Мінімальний цільовий pH",
-            "en": "Target pH Minimum"
-          }
-        },
-        {
-          "id": "target_ph_max",
-          "type": "number",
-          "required": true,
-          "min": 5.0,
-          "max": 8.5,
-          "default": 6.2,
-          "label": {
-            "uk": "Максимальний цільовий pH",
-            "en": "Target pH Maximum"
-          }
-        },
-        {
-          "id": "dose_seconds",
-          "type": "number",
-          "required": true,
-          "min": 1,
-          "max": 60,
-          "default": 5,
-          "label": {
-            "uk": "Тривалість одного дозування (секунди)",
-            "en": "Single Dose Duration (seconds)"
-          }
-        },
-        {
-          "id": "pause_seconds",
-          "type": "number",
-          "required": true,
-          "min": 30,
-          "max": 600,
-          "default": 120,
-          "label": {
-            "uk": "Пауза на перемішування (секунди)",
-            "en": "Mixing Pause Duration (seconds)"
-          }
-        },
-        {
-          "id": "max_cycles",
-          "type": "number",
-          "required": true,
-          "min": 1,
-          "max": 20,
-          "default": 5,
-          "label": {
-            "uk": "Максимальна кількість циклів",
-            "en": "Maximum Number of Cycles"
-          }
-        },
-        {
-          "id": "max_run_minutes",
-          "type": "number",
-          "required": true,
-          "min": 5,
-          "max": 120,
-          "default": 30,
-          "label": {
-            "uk": "Аварійний тайм-аут (хвилини)",
-            "en": "Emergency Timeout (minutes)"
-          }
-        },
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "default": true,
-          "label": {
-            "uk": "Надсилати сповіщення у Telegram",
-            "en": "Send Telegram Notification"
+            "uk": "Датчик наявності мережі",
+            "en": "Grid Power Sensor"
           }
         },
         {
@@ -344,7 +820,666 @@
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Дозування pH з лімітом циклів та паузою на перемішування.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ ph_sensor }}\n    above: {{ target_ph_max }}\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚗️ pH вище норми ({% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}). Починаю дозування.\"\n  {% endif %}\n  {% endif %}\n  - repeat:\n      count: {{ max_cycles }}\n      sequence:\n        - service: switch.turn_on\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ dose_seconds }}\n        - service: switch.turn_off\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ pause_seconds }}\n        - condition: numeric_state\n          entity_id: {{ ph_sensor }}\n          above: {{ target_ph_max }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ dosing_pump }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Дозування pH завершено. Поточний pH: {% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}.\"\n  {% endif %}\nmax_exceeded: silent\n"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про знеструмлення (220В).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"on\"\n    to: \"off\"\n    id: \"power_off\"\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"off\"\n    to: \"on\"\n    id: \"power_on\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"power_off\"\n        sequence:\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🔴 УВАГА! Зникла напруга 220В!\"\n          {% endif %}\n      - conditions:\n          - condition: trigger\n            id: \"power_on\"\n        sequence:\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🟢 Світло є! Відновлено напругу 220В.\"\n"
+  },
+  {
+    "id": "energy_away_mode",
+    "category": "energy",
+    "tier": "free",
+    "title": {
+      "uk": "Економія енергії (Нікого немає вдома)",
+      "en": "Away Mode Energy Savings"
+    },
+    "description": {
+      "uk": "Автоматично вимикає некритичні прилади (розетки, обігрівачі), коли всі йдуть з дому.",
+      "en": "Automatically turns off non-critical appliances when everyone leaves home."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Вимкнення приладів (Away)",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "presence_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "person",
+            "device_tracker",
+            "group"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик присутності",
+            "en": "Presence Sensor"
+          }
+        },
+        {
+          "id": "non_critical_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "light",
+            "climate"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Прилад для вимкнення",
+            "en": "Appliance to turn off"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Економія енергії, коли нікого немає вдома.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ presence_sensor }}\n    to: \"not_home\"\n    for:\n      minutes: 10\naction:\n  - service: \"{{ 'light.turn_off' if 'light.' in non_critical_switch else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ non_critical_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Економія енергії (Нікого немає вдома)\"\n  {% endif %}"
+  },
+  {
+    "id": "energy_battery_alert",
+    "category": "energy",
+    "tier": "free",
+    "title": {
+      "uk": "Сповіщення про низький заряд АКБ",
+      "en": "Low Battery Alert"
+    },
+    "description": {
+      "uk": "Надсилає повідомлення в Telegram, коли заряд акумулятора (чи телефона) падає нижче заданого рівня.",
+      "en": "Sends a Telegram alert when the battery level drops below a specified threshold."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Низький заряд батареї",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "battery_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик заряду (Battery %)",
+            "en": "Battery Sensor (%)"
+          }
+        },
+        {
+          "id": "threshold",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 100,
+          "default": 20,
+          "label": {
+            "uk": "Поріг заряду (%)",
+            "en": "Battery Threshold (%)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про низький заряд акумулятора.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ battery_sensor }}\n    below: {{ threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Заряд батареї впав нижче {{ threshold }}%!\"\n\n  {% endif %}"
+  },
+  {
+    "id": "energy_blackout_monitor",
+    "category": "energy",
+    "tier": "free",
+    "title": {
+      "uk": "Система сповіщень про блекаути / вимкнення світла",
+      "en": "Blackout / Power Outage Monitor"
+    },
+    "description": {
+      "uk": "Моніторинг стану мережі/UPS та відправка сповіщень у Telegram із вказуванням часу роботи від батареї.",
+      "en": "Monitors grid/UPS status and sends Telegram alerts with battery time."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Сповіщення про блекаут",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "grid_status_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor",
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик наявності 220В",
+            "en": "Grid Status Sensor (220V)"
+          }
+        },
+        {
+          "id": "ups_battery_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": false,
+          "label": {
+            "uk": "Датчик заряду UPS (%)",
+            "en": "UPS Battery Level (%)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Моніторинг стану мережі та відправка сповіщень.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_status_sensor }}\naction:\n  - choose:\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"off\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🚨 Блекаут! Електропостачання вимкнено. {% if ups_battery_sensor %}Заряд батареї: {{ '{{' }} states('{{ ups_battery_sensor }}') {{ '}}' }}%{% endif %}\"\n          {% endif %}\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"on\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"💡 Світло з'явилося! Електропостачання відновлено.\"\n          {% endif %}"
+  },
+  {
+    "id": "energy_dynamic_charging",
+    "category": "energy",
+    "tier": "free",
+    "title": {
+      "uk": "Динамічна зарядка за нічним тарифом",
+      "en": "Dynamic Night Tariff Charging"
+    },
+    "description": {
+      "uk": "Автоматичне увімкнення зарядки при низькому тарифі та вимкнення при досягненні 100% або на початку пікового тарифу.",
+      "en": "Auto starts charging on low tariff and stops when 100% or peak tariff starts."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Зарядка за розкладом",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "charger_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Реле зарядного пристрою",
+            "en": "Charger Relay Switch"
+          }
+        },
+        {
+          "id": "battery_level_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик заряду станції (%)",
+            "en": "Station Battery Level Sensor (%)"
+          }
+        },
+        {
+          "id": "tariff_start",
+          "type": "string",
+          "required": true,
+          "default": "23:00:00",
+          "label": {
+            "uk": "Початок нічного тарифу",
+            "en": "Night Tariff Start Time"
+          }
+        },
+        {
+          "id": "tariff_end",
+          "type": "string",
+          "required": true,
+          "default": "07:00:00",
+          "label": {
+            "uk": "Кінець нічного тарифу",
+            "en": "Night Tariff End Time"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Динамічна зарядка акумуляторів / станцій за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ tariff_start }}\"\n    id: \"start_tariff\"\n  - platform: time\n    at: \"{{ tariff_end }}\"\n    id: \"end_tariff\"\n  - platform: numeric_state\n    entity_id: {{ battery_level_sensor }}\n    above: 99\n    id: \"full_battery\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start_tariff\"\n          - condition: numeric_state\n            entity_id: {{ battery_level_sensor }}\n            below: 100\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"end_tariff\"\n              - condition: trigger\n                id: \"full_battery\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Динамічна зарядка за нічним тарифом\"\n  {% endif %}"
+  },
+  {
+    "id": "energy_inverter_load_shedding",
+    "category": "energy",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Авто-вимкнення приладів при роботі від інвертора",
+      "en": "Auto-Disable Heavy Loads on Inverter Power"
+    },
+    "description": {
+      "uk": "Автоматично вимикає бойлер, кондиціонер чи інші потужні прилади, коли зникає мережа і вмикається інвертор.",
+      "en": "Automatically turns off heavy appliances like boilers and ACs when switching to inverter power."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Економія інвертора",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "inverter_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor",
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик роботи інвертора (ON = від батареї)",
+            "en": "Inverter Status Sensor (ON = battery mode)"
+          }
+        },
+        {
+          "id": "heavy_load_1",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "climate"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Потужний прилад 1 (Бойлер)",
+            "en": "Heavy Load 1 (Boiler)"
+          }
+        },
+        {
+          "id": "heavy_load_2",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "climate"
+          ],
+          "required": false,
+          "label": {
+            "uk": "Потужний прилад 2 (Опціонально)",
+            "en": "Heavy Load 2 (Optional)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне вимкнення потужних приладів при роботі від інвертора.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ inverter_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_1 }}\n  {% if heavy_load_2 %}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Авто-вимкнення приладів при роботі від інвертора\"\n  {% endif %}"
+  },
+  {
+    "id": "energy_inverter_solar_control",
+    "category": "energy",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Контроль генератора / сонячного інвертора",
+      "en": "Inverter / Solar Generator Control"
+    },
+    "description": {
+      "uk": "Перемикає режим інвертора на Grid/Utility, коли потужність сонячних панелей падає.",
+      "en": "Switches inverter mode to Grid/Utility when solar panel power drops."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Керування режимом інвертора",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "solar_power_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Потужність панелей (Вт)",
+            "en": "Solar Power Sensor (W)"
+          }
+        },
+        {
+          "id": "power_threshold",
+          "type": "number",
+          "required": true,
+          "min": 10,
+          "max": 1000,
+          "default": 100,
+          "label": {
+            "uk": "Поріг падіння потужності (Вт)",
+            "en": "Power Drop Threshold (W)"
+          }
+        },
+        {
+          "id": "inverter_mode_select",
+          "type": "entity_id",
+          "allowed_domains": [
+            "select",
+            "input_select"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Селектор режиму інвертора",
+            "en": "Inverter Mode Selector"
+          }
+        },
+        {
+          "id": "grid_mode_option",
+          "type": "string",
+          "required": true,
+          "default": "Utility",
+          "label": {
+            "uk": "Опція режиму Мережа (Grid)",
+            "en": "Grid Mode Option"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Перемикання інвертора на мережу при низькому сонці.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ solar_power_sensor }}\n    below: {{ power_threshold }}\n    for:\n      minutes: 10\naction:\n  - service: select.select_option\n    target:\n      entity_id: {{ inverter_mode_select }}\n    data:\n      option: \"{{ grid_mode_option }}\"\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль генератора / сонячного інвертора\"\n  {% endif %}"
+  },
+  {
+    "id": "energy_night_tariff_charging",
+    "category": "energy",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Зарядка батарей за нічним тарифом",
+      "en": "Battery Charging on Night Tariff"
+    },
+    "description": {
+      "uk": "Оптимізація зарядки батареї/електромобіля за нічним тарифом (наприклад, 23:00 - 07:00).",
+      "en": "Optimizes battery/EV charging during night tariff hours."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Нічний тариф",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "charger_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Реле зарядного пристрою",
+            "en": "Charger Relay"
+          }
+        },
+        {
+          "id": "start_time",
+          "type": "time",
+          "required": true,
+          "default": "23:00:00",
+          "label": {
+            "uk": "Час початку (вмикання)",
+            "en": "Start Time (Turn ON)"
+          }
+        },
+        {
+          "id": "end_time",
+          "type": "time",
+          "required": true,
+          "default": "07:00:00",
+          "label": {
+            "uk": "Час завершення (вимикання)",
+            "en": "End Time (Turn OFF)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Зарядка за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\n    id: \"start\"\n  - platform: time\n    at: \"{{ end_time }}\"\n    id: \"end\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"end\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Зарядка батарей за нічним тарифом\"\n  {% endif %}"
+  },
+  {
+    "id": "energy_peak_shaving",
+    "category": "energy",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Балансування навантаження (Peak Shaving)",
+      "en": "Load Balancing (Peak Shaving)"
+    },
+    "description": {
+      "uk": "Авто-вимкнення потужного споживача, якщо загальна потужність перевищує ліміт.",
+      "en": "Automatically turns off heavy load if total power consumption exceeds a limit."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Балансування навантаження",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "total_power_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик загальної потужності (Вт)",
+            "en": "Total Power Sensor (W)"
+          }
+        },
+        {
+          "id": "power_limit",
+          "type": "number",
+          "required": true,
+          "min": 500,
+          "max": 20000,
+          "default": 5000,
+          "label": {
+            "uk": "Ліміт потужності (Вт)",
+            "en": "Power Limit (W)"
+          }
+        },
+        {
+          "id": "heavy_load_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Потужний прилад для вимкнення",
+            "en": "Heavy Load Switch to Turn Off"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Peak shaving: вимкнення приладу при перевищенні ліміту потужності.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ total_power_sensor }}\n    above: {{ power_limit }}\n    for:\n      seconds: 30\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_switch }}\n  {% if telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚡ Перевищено ліміт потужності ({{ power_limit }}Вт). Вимкнено потужний прилад для балансування.\"\n  {% endif %}\n\n  {% endif %}"
   },
   {
     "id": "fertilizer_dosing",
@@ -613,16 +1748,16 @@
     "jinja_yaml_template": "alias: \"Greenhouse Climate Master\"\ndescription: \"Автоматичне управління вентиляцією та зволоженням.\"\nmode: queued\ntrigger:\n  - platform: state\n    entity_id: {{ temp_sensor }}\n  - platform: state\n    entity_id: {{ humidity_sensor }}\naction:\n  - choose:\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            above: {{ target_temp + temp_hysteresis }}\n        sequence:\n          - service: \"{{ 'cover.open_cover' if 'cover.' in window_actuator else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ window_actuator }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"🌡️ Температура вище норми. Відкриваю вентиляцію.\"\n          {% endif %}\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            below: {{ target_temp - temp_hysteresis }}\n        sequence:\n          - service: \"{{ 'cover.close_cover' if 'cover.' in window_actuator else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ window_actuator }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"❄️ Температура нижче норми. Закриваю вентиляцію.\"\n          {% endif %}\n  - choose:\n      - conditions:\n          - condition: numeric_state\n            entity_id: {{ humidity_sensor }}\n            above: {{ target_humidity }}\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ dehumidifier_switch }}\n          {% if enable_telegram and telegram_target %}\n          - service: {{ telegram_target }}\n            data:\n              message: \"💧 Вологість вище норми. Вмикаю осушувач.\"\n          {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Комплексний клімат-контроль теплиці\"\n  {% endif %}"
   },
   {
-    "id": "energy_220v_telegram",
-    "category": "energy",
+    "id": "irrigation_filter_flush",
+    "category": "irrigation",
     "tier": "free",
     "title": {
-      "uk": "Сповіщення про знеструмлення (220В)",
-      "en": "220V Power Outage Notification"
+      "uk": "Промивка фільтрів",
+      "en": "Filter Flush"
     },
     "description": {
-      "uk": "Надсилає повідомлення у Telegram при зникненні та відновленні напруги 220В.",
-      "en": "Sends Telegram notifications when 220V grid power is lost and restored."
+      "uk": "Короткочасне увімкнення дренажного клапана для очищення системи за розкладом.",
+      "en": "Short activation of drainage valve to flush the system on a schedule."
     },
     "form_schema": {
       "fields": [
@@ -640,437 +1775,14 @@
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Контроль напруги 220В",
+          "default": "Промивка фільтрів",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "grid_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик наявності мережі",
-            "en": "Grid Power Sensor"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service Name"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про знеструмлення (220В).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"on\"\n    to: \"off\"\n    id: \"power_off\"\n  - platform: state\n    entity_id: {{ grid_sensor }}\n    from: \"off\"\n    to: \"on\"\n    id: \"power_on\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"power_off\"\n        sequence:\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🔴 УВАГА! Зникла напруга 220В!\"\n          {% endif %}\n      - conditions:\n          - condition: trigger\n            id: \"power_on\"\n        sequence:\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🟢 Світло є! Відновлено напругу 220В.\"\n"
-  },
-  {
-    "id": "energy_inverter_load_shedding",
-    "category": "energy",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Авто-вимкнення приладів при роботі від інвертора",
-      "en": "Auto-Disable Heavy Loads on Inverter Power"
-    },
-    "description": {
-      "uk": "Автоматично вимикає бойлер, кондиціонер чи інші потужні прилади, коли зникає мережа і вмикається інвертор.",
-      "en": "Automatically turns off heavy appliances like boilers and ACs when switching to inverter power."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Економія інвертора",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "inverter_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик роботи інвертора (ON = від батареї)",
-            "en": "Inverter Status Sensor (ON = battery mode)"
-          }
-        },
-        {
-          "id": "heavy_load_1",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "climate"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Потужний прилад 1 (Бойлер)",
-            "en": "Heavy Load 1 (Boiler)"
-          }
-        },
-        {
-          "id": "heavy_load_2",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "climate"
-          ],
-          "required": false,
-          "label": {
-            "uk": "Потужний прилад 2 (Опціонально)",
-            "en": "Heavy Load 2 (Optional)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне вимкнення потужних приладів при роботі від інвертора.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ inverter_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_1 }}\n  {% if heavy_load_2 %}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Авто-вимкнення приладів при роботі від інвертора\"\n  {% endif %}"
-  },
-  {
-    "id": "energy_night_tariff_charging",
-    "category": "energy",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Зарядка батарей за нічним тарифом",
-      "en": "Battery Charging on Night Tariff"
-    },
-    "description": {
-      "uk": "Оптимізація зарядки батареї/електромобіля за нічним тарифом (наприклад, 23:00 - 07:00).",
-      "en": "Optimizes battery/EV charging during night tariff hours."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Нічний тариф",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "charger_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Реле зарядного пристрою",
-            "en": "Charger Relay"
-          }
-        },
-        {
-          "id": "start_time",
-          "type": "time",
-          "required": true,
-          "default": "23:00:00",
-          "label": {
-            "uk": "Час початку (вмикання)",
-            "en": "Start Time (Turn ON)"
-          }
-        },
-        {
-          "id": "end_time",
-          "type": "time",
-          "required": true,
-          "default": "07:00:00",
-          "label": {
-            "uk": "Час завершення (вимикання)",
-            "en": "End Time (Turn OFF)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Зарядка за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\n    id: \"start\"\n  - platform: time\n    at: \"{{ end_time }}\"\n    id: \"end\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"end\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Зарядка батарей за нічним тарифом\"\n  {% endif %}"
-  },
-  {
-    "id": "climate_temp_ventilation",
-    "category": "climate",
-    "tier": "free",
-    "title": {
-      "uk": "Провітрювання за температурою",
-      "en": "Temperature-based Ventilation"
-    },
-    "description": {
-      "uk": "Вмикає витяжку або відкриває кватирку, якщо температура перевищує заданий поріг.",
-      "en": "Turns on exhaust fan or opens a window if temperature exceeds a certain threshold."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Провітрювання",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "temp_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик температури",
-            "en": "Temperature Sensor"
-          }
-        },
-        {
-          "id": "fan_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "fan",
-            "cover"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Витяжка або кватирка",
-            "en": "Fan or Window Cover"
-          }
-        },
-        {
-          "id": "max_temp",
-          "type": "number",
-          "required": true,
-          "min": 0,
-          "max": 100,
-          "default": 25,
-          "label": {
-            "uk": "Максимальна температура (°C)",
-            "en": "Max Temperature (°C)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Провітрювання за температурою.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ max_temp }}\n    id: \"too_hot\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ max_temp - 2 }}\n    id: \"cooled_down\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: \"{{ 'cover.open_cover' if 'cover.' in fan_switch else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"cooled_down\"\n        sequence:\n          - service: \"{{ 'cover.close_cover' if 'cover.' in fan_switch else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ fan_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Провітрювання за температурою\"\n  {% endif %}"
-  },
-  {
-    "id": "climate_smart_thermostat_cooldown",
-    "category": "climate",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Розумний термостат із захистом реле (Cooldown)",
-      "en": "Smart Thermostat with Relay Protection"
-    },
-    "description": {
-      "uk": "Керує обігрівом із захистом від занадто частого перемикання (cooldown) для продовження терміну служби реле.",
-      "en": "Controls heating with a cooldown mechanism to prevent rapid relay toggling."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Розумний термостат",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "temp_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик температури",
-            "en": "Temperature Sensor"
-          }
-        },
-        {
-          "id": "heater_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Реле обігрівача",
-            "en": "Heater Switch"
-          }
-        },
-        {
-          "id": "target_temp",
-          "type": "number",
-          "required": true,
-          "min": 5,
-          "max": 35,
-          "default": 22,
-          "label": {
-            "uk": "Цільова температура (°C)",
-            "en": "Target Temperature (°C)"
-          }
-        },
-        {
-          "id": "cooldown_minutes",
-          "type": "number",
-          "required": true,
-          "min": 1,
-          "max": 60,
-          "default": 5,
-          "label": {
-            "uk": "Мінімальний час між перемиканнями (хв)",
-            "en": "Minimum time between toggles (min)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Термостат із cooldown.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ target_temp - 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_cold\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    above: {{ target_temp + 0.5 }}\n    for:\n      minutes: {{ cooldown_minutes }}\n    id: \"too_hot\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"too_cold\"\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ heater_switch }}\n      - conditions:\n          - condition: trigger\n            id: \"too_hot\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ heater_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумний термостат із захистом реле (Cooldown)\"\n  {% endif %}"
-  },
-  {
-    "id": "security_leak_protection",
-    "category": "security",
-    "tier": "free",
-    "title": {
-      "uk": "Захист від протікання",
-      "en": "Water Leak Protection"
-    },
-    "description": {
-      "uk": "Автоматично перекриває кран водопостачання при спрацюванні датчика протікання води.",
-      "en": "Automatically shuts off the main water valve when a water leak is detected."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Захист від потопу",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "leak_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик протікання",
-            "en": "Water Leak Sensor"
-          }
-        },
-        {
-          "id": "water_valve",
+          "id": "flush_valve",
           "type": "entity_id",
           "allowed_domains": [
             "switch",
@@ -1078,174 +1790,30 @@
           ],
           "required": true,
           "label": {
-            "uk": "Реле водяного крана",
-            "en": "Main Water Valve Switch"
+            "uk": "Клапан промивки",
+            "en": "Flush Valve"
           }
         },
         {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Авто-перекриття крана при протіканні.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Захист від протікання\"\n  {% endif %}"
-  },
-  {
-    "id": "security_presence_simulation",
-    "category": "security",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Імітація присутності вдома",
-      "en": "Presence Simulation"
-    },
-    "description": {
-      "uk": "Випадкове увімкнення та вимкнення світла ввечері, щоб створити ілюзію присутності людей вдома.",
-      "en": "Randomly toggles lights in the evening to create an illusion that someone is at home."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Імітація присутності",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "light_1",
-          "type": "entity_id",
-          "allowed_domains": [
-            "light",
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Світло 1 (наприклад, вітальня)",
-            "en": "Light 1 (e.g. Living Room)"
-          }
-        },
-        {
-          "id": "light_2",
-          "type": "entity_id",
-          "allowed_domains": [
-            "light",
-            "switch"
-          ],
-          "required": false,
-          "label": {
-            "uk": "Світло 2 (опціонально)",
-            "en": "Light 2 (Optional)"
-          }
-        },
-        {
-          "id": "start_time",
+          "id": "schedule_time",
           "type": "time",
           "required": true,
-          "default": "18:00:00",
+          "default": "08:00:00",
           "label": {
-            "uk": "Час початку симуляції",
-            "en": "Simulation Start Time"
+            "uk": "Час промивки",
+            "en": "Flush Time"
           }
         },
         {
-          "id": "end_time",
-          "type": "time",
-          "required": true,
-          "default": "23:00:00",
-          "label": {
-            "uk": "Час завершення",
-            "en": "Simulation End Time"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Імітація присутності вдома.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\ncondition: []\naction:\n  - repeat:\n      while:\n        - condition: time\n          before: \"{{ end_time }}\"\n      sequence:\n        - delay:\n            minutes: \"{% raw %}{{ range(10, 45) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_1 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_1 }}\n        {% if light_2 %}\n        - delay:\n            minutes: \"{% raw %}{{ range(5, 20) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_2 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_2 }}\n        {% endif %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_1 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_1 }}\n  {% if light_2 %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_2 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Імітація присутності вдома\"\n  {% endif %}"
-  },
-  {
-    "id": "energy_battery_alert",
-    "category": "energy",
-    "tier": "free",
-    "title": {
-      "uk": "Сповіщення про низький заряд АКБ",
-      "en": "Low Battery Alert"
-    },
-    "description": {
-      "uk": "Надсилає повідомлення в Telegram, коли заряд акумулятора (чи телефона) падає нижче заданого рівня.",
-      "en": "Sends a Telegram alert when the battery level drops below a specified threshold."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Низький заряд батареї",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "battery_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик заряду (Battery %)",
-            "en": "Battery Sensor (%)"
-          }
-        },
-        {
-          "id": "threshold",
+          "id": "flush_seconds",
           "type": "number",
           "required": true,
-          "min": 1,
-          "max": 100,
-          "default": 20,
+          "min": 5,
+          "max": 300,
+          "default": 15,
           "label": {
-            "uk": "Поріг заряду (%)",
-            "en": "Battery Threshold (%)"
+            "uk": "Тривалість промивки (секунди)",
+            "en": "Flush Duration (seconds)"
           }
         },
         {
@@ -1260,262 +1828,7 @@
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про низький заряд акумулятора.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ battery_sensor }}\n    below: {{ threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Заряд батареї впав нижче {{ threshold }}%!\"\n\n  {% endif %}"
-  },
-  {
-    "id": "energy_away_mode",
-    "category": "energy",
-    "tier": "free",
-    "title": {
-      "uk": "Економія енергії (Нікого немає вдома)",
-      "en": "Away Mode Energy Savings"
-    },
-    "description": {
-      "uk": "Автоматично вимикає некритичні прилади (розетки, обігрівачі), коли всі йдуть з дому.",
-      "en": "Automatically turns off non-critical appliances when everyone leaves home."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Вимкнення приладів (Away)",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "presence_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "person",
-            "device_tracker",
-            "group"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик присутності",
-            "en": "Presence Sensor"
-          }
-        },
-        {
-          "id": "non_critical_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "light",
-            "climate"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Прилад для вимкнення",
-            "en": "Appliance to turn off"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Економія енергії, коли нікого немає вдома.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ presence_sensor }}\n    to: \"not_home\"\n    for:\n      minutes: 10\naction:\n  - service: \"{{ 'light.turn_off' if 'light.' in non_critical_switch else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ non_critical_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Економія енергії (Нікого немає вдома)\"\n  {% endif %}"
-  },
-  {
-    "id": "energy_peak_shaving",
-    "category": "energy",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Балансування навантаження (Peak Shaving)",
-      "en": "Load Balancing (Peak Shaving)"
-    },
-    "description": {
-      "uk": "Авто-вимкнення потужного споживача, якщо загальна потужність перевищує ліміт.",
-      "en": "Automatically turns off heavy load if total power consumption exceeds a limit."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Балансування навантаження",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "total_power_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик загальної потужності (Вт)",
-            "en": "Total Power Sensor (W)"
-          }
-        },
-        {
-          "id": "power_limit",
-          "type": "number",
-          "required": true,
-          "min": 500,
-          "max": 20000,
-          "default": 5000,
-          "label": {
-            "uk": "Ліміт потужності (Вт)",
-            "en": "Power Limit (W)"
-          }
-        },
-        {
-          "id": "heavy_load_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Потужний прилад для вимкнення",
-            "en": "Heavy Load Switch to Turn Off"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Peak shaving: вимкнення приладу при перевищенні ліміту потужності.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ total_power_sensor }}\n    above: {{ power_limit }}\n    for:\n      seconds: 30\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ heavy_load_switch }}\n  {% if telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚡ Перевищено ліміт потужності ({{ power_limit }}Вт). Вимкнено потужний прилад для балансування.\"\n  {% endif %}\n\n  {% endif %}"
-  },
-  {
-    "id": "energy_inverter_solar_control",
-    "category": "energy",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Контроль генератора / сонячного інвертора",
-      "en": "Inverter / Solar Generator Control"
-    },
-    "description": {
-      "uk": "Перемикає режим інвертора на Grid/Utility, коли потужність сонячних панелей падає.",
-      "en": "Switches inverter mode to Grid/Utility when solar panel power drops."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Керування режимом інвертора",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "solar_power_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Потужність панелей (Вт)",
-            "en": "Solar Power Sensor (W)"
-          }
-        },
-        {
-          "id": "power_threshold",
-          "type": "number",
-          "required": true,
-          "min": 10,
-          "max": 1000,
-          "default": 100,
-          "label": {
-            "uk": "Поріг падіння потужності (Вт)",
-            "en": "Power Drop Threshold (W)"
-          }
-        },
-        {
-          "id": "inverter_mode_select",
-          "type": "entity_id",
-          "allowed_domains": [
-            "select",
-            "input_select"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Селектор режиму інвертора",
-            "en": "Inverter Mode Selector"
-          }
-        },
-        {
-          "id": "grid_mode_option",
-          "type": "string",
-          "required": true,
-          "default": "Utility",
-          "label": {
-            "uk": "Опція режиму Мережа (Grid)",
-            "en": "Grid Mode Option"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Перемикання інвертора на мережу при низькому сонці.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ solar_power_sensor }}\n    below: {{ power_threshold }}\n    for:\n      minutes: 10\naction:\n  - service: select.select_option\n    target:\n      entity_id: {{ inverter_mode_select }}\n    data:\n      option: \"{{ grid_mode_option }}\"\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль генератора / сонячного інвертора\"\n  {% endif %}"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Щоденна промивка фільтрів води.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ flush_valve }}\n  - delay:\n      seconds: {{ flush_seconds }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ flush_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Промивка фільтрів\"\n  {% endif %}"
   },
   {
     "id": "irrigation_soil_moisture",
@@ -1615,89 +1928,6 @@
     "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Полив при низькій вологості ґрунту.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ soil_sensor }}\n    below: {{ moisture_threshold }}\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ irrigation_valve }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ irrigation_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Полив за датчиком вологості ґрунту\"\n  {% endif %}"
   },
   {
-    "id": "irrigation_filter_flush",
-    "category": "irrigation",
-    "tier": "free",
-    "title": {
-      "uk": "Промивка фільтрів",
-      "en": "Filter Flush"
-    },
-    "description": {
-      "uk": "Короткочасне увімкнення дренажного клапана для очищення системи за розкладом.",
-      "en": "Short activation of drainage valve to flush the system on a schedule."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Промивка фільтрів",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "flush_valve",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "valve"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Клапан промивки",
-            "en": "Flush Valve"
-          }
-        },
-        {
-          "id": "schedule_time",
-          "type": "time",
-          "required": true,
-          "default": "08:00:00",
-          "label": {
-            "uk": "Час промивки",
-            "en": "Flush Time"
-          }
-        },
-        {
-          "id": "flush_seconds",
-          "type": "number",
-          "required": true,
-          "min": 5,
-          "max": 300,
-          "default": 15,
-          "label": {
-            "uk": "Тривалість промивки (секунди)",
-            "en": "Flush Duration (seconds)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Щоденна промивка фільтрів води.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ flush_valve }}\n  - delay:\n      seconds: {{ flush_seconds }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ flush_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Промивка фільтрів\"\n  {% endif %}"
-  },
-  {
     "id": "irrigation_weather_smart",
     "category": "irrigation",
     "tier": "pro_only",
@@ -1793,383 +2023,132 @@
     "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Полив із перевіркою прогнозу погоди.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ schedule_time }}\"\ncondition:\n  - condition: template\n    value_template: \"{% raw %}{{ not ('rain' in states('{{ weather_entity }}') or 'rain' in state_attr('{{ weather_entity }}', 'forecast')[0].condition) }}{% endraw %}\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ irrigation_valve }}\n  - delay:\n      minutes: {{ duration_minutes }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ irrigation_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Інтелектуальний полив (Прогноз погоди)\"\n  {% endif %}"
   },
   {
-    "id": "climate_bathroom_humidity",
-    "category": "climate",
-    "tier": "free",
+    "id": "ph_dosing_control",
+    "category": "irrigation",
+    "tier": "pack_only",
     "title": {
-      "uk": "Автоматична витяжка у ванній",
-      "en": "Automatic Bathroom Exhaust Fan"
+      "uk": "Дозування pH з лімітом циклів",
+      "en": "pH Dosing with Cycle Limit and Mixing Pause"
     },
     "description": {
-      "uk": "Вмикає витяжку при підвищенні вологості та автоматично вимикає за таймером.",
-      "en": "Turns on exhaust fan on high humidity and turns off automatically on a timer."
+      "uk": "Дозує pH-розчин порціями з паузою на перемішування, лімітом циклів та аварійним вимкненням при перевищенні часу.",
+      "en": "Doses pH solution in portions with mixing pauses, cycle limit, and emergency shutdown on timeout."
     },
     "form_schema": {
       "fields": [
         {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Витяжка у ванній",
+          "default": "Дозування pH",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "humidity_sensor",
+          "id": "ph_sensor",
           "type": "entity_id",
           "allowed_domains": [
             "sensor"
           ],
           "required": true,
           "label": {
-            "uk": "Датчик вологості (%)",
-            "en": "Humidity Sensor (%)"
+            "uk": "Датчик pH",
+            "en": "pH Sensor"
           }
         },
         {
-          "id": "humidity_threshold",
+          "id": "dosing_pump",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Реле дозуючого насоса",
+            "en": "Dosing Pump Switch"
+          }
+        },
+        {
+          "id": "target_ph_min",
           "type": "number",
           "required": true,
-          "min": 40,
-          "max": 100,
-          "default": 70,
+          "min": 4.0,
+          "max": 7.0,
+          "default": 5.8,
           "label": {
-            "uk": "Поріг вмикання (%)",
-            "en": "Activation Threshold (%)"
+            "uk": "Мінімальний цільовий pH",
+            "en": "Target pH Minimum"
           }
         },
         {
-          "id": "exhaust_fan",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "fan"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Вентилятор (Витяжка)",
-            "en": "Exhaust Fan"
-          }
-        },
-        {
-          "id": "run_minutes",
+          "id": "target_ph_max",
           "type": "number",
           "required": true,
-          "min": 1,
-          "max": 60,
-          "default": 15,
+          "min": 5.0,
+          "max": 8.5,
+          "default": 6.2,
           "label": {
-            "uk": "Час роботи після падіння вологості (хв)",
-            "en": "Run time after humidity drops (min)"
+            "uk": "Максимальний цільовий pH",
+            "en": "Target pH Maximum"
           }
         },
         {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Керування витяжкою за вологістю.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ humidity_sensor }}\n    above: {{ humidity_threshold }}\naction:\n  - service: \"{{ 'fan.turn_on' if 'fan.' in exhaust_fan else 'switch.turn_on' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n  - wait_for_trigger:\n      - platform: numeric_state\n        entity_id: {{ humidity_sensor }}\n        below: {{ humidity_threshold - 5 }}\n  - delay:\n      minutes: {{ run_minutes }}\n  - service: \"{{ 'fan.turn_off' if 'fan.' in exhaust_fan else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ exhaust_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Автоматична витяжка у ванній\"\n  {% endif %}"
-  },
-  {
-    "id": "climate_night_setback",
-    "category": "climate",
-    "tier": "free",
-    "title": {
-      "uk": "Нічний режим кондиціонера/опалення",
-      "en": "Night Setback for HVAC"
-    },
-    "description": {
-      "uk": "Автоматично змінює цільову температуру на нічну та повертає на денну зранку.",
-      "en": "Automatically changes target temperature for night and restores it in the morning."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Нічний клімат",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "climate_entity",
-          "type": "entity_id",
-          "allowed_domains": [
-            "climate"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Термостат/Кондиціонер",
-            "en": "Climate Entity"
-          }
-        },
-        {
-          "id": "night_time",
-          "type": "time",
-          "required": true,
-          "default": "22:30:00",
-          "label": {
-            "uk": "Час увімкнення нічного режиму",
-            "en": "Night Mode Start Time"
-          }
-        },
-        {
-          "id": "night_temp",
-          "type": "number",
-          "required": true,
-          "min": 10,
-          "max": 30,
-          "default": 19,
-          "label": {
-            "uk": "Нічна температура (°C)",
-            "en": "Night Temperature (°C)"
-          }
-        },
-        {
-          "id": "day_time",
-          "type": "time",
-          "required": true,
-          "default": "07:00:00",
-          "label": {
-            "uk": "Час повернення до денного режиму",
-            "en": "Day Mode Start Time"
-          }
-        },
-        {
-          "id": "day_temp",
-          "type": "number",
-          "required": true,
-          "min": 10,
-          "max": 30,
-          "default": 22,
-          "label": {
-            "uk": "Денна температура (°C)",
-            "en": "Day Temperature (°C)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматична зміна температури на ніч.\"\nmode: single\ntrigger:\n  - platform: time\n    at: \"{{ night_time }}\"\n    id: \"night\"\n  - platform: time\n    at: \"{{ day_time }}\"\n    id: \"day\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"night\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ night_temp }}\n      - conditions:\n          - condition: trigger\n            id: \"day\"\n        sequence:\n          - service: climate.set_temperature\n            target:\n              entity_id: {{ climate_entity }}\n            data:\n              temperature: {{ day_temp }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічний режим кондиціонера/опалення\"\n  {% endif %}"
-  },
-  {
-    "id": "climate_co2_ventilation",
-    "category": "climate",
-    "tier": "pro_only",
-    "title": {
-      "uk": "Контроль CO2 та вентиляції",
-      "en": "CO2 & Ventilation Control"
-    },
-    "description": {
-      "uk": "Вмикає приточну вентиляцію при підвищенні CO2 із захистом від сильного охолодження кімнати.",
-      "en": "Turns on fresh air ventilation on high CO2, with protection against overcooling the room."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Контроль якості повітря (CO2)",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "co2_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик CO2 (ppm)",
-            "en": "CO2 Sensor (ppm)"
-          }
-        },
-        {
-          "id": "co2_threshold",
-          "type": "number",
-          "required": true,
-          "min": 400,
-          "max": 2000,
-          "default": 800,
-          "label": {
-            "uk": "Поріг CO2 (ppm)",
-            "en": "CO2 Threshold (ppm)"
-          }
-        },
-        {
-          "id": "ventilation_fan",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch",
-            "fan"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Вентиляція / Бризер",
-            "en": "Ventilation / Fresh Air Fan"
-          }
-        },
-        {
-          "id": "temp_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик температури в кімнаті",
-            "en": "Room Temperature Sensor"
-          }
-        },
-        {
-          "id": "min_temp",
-          "type": "number",
-          "required": true,
-          "min": 10,
-          "max": 30,
-          "default": 18,
-          "label": {
-            "uk": "Мінімальна дозволена температура (°C)",
-            "en": "Minimum Allowed Temperature (°C)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вентиляція за рівнем CO2 із термозахистом.\"\nmode: restart\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\n    id: \"high_co2\"\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    below: {{ co2_threshold - 100 }}\n    id: \"low_co2\"\n  - platform: numeric_state\n    entity_id: {{ temp_sensor }}\n    below: {{ min_temp }}\n    id: \"too_cold\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"high_co2\"\n          - condition: numeric_state\n            entity_id: {{ temp_sensor }}\n            above: {{ min_temp }}\n        sequence:\n          - service: \"{{ 'fan.turn_on' if 'fan.' in ventilation_fan else 'switch.turn_on' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"low_co2\"\n              - condition: trigger\n                id: \"too_cold\"\n        sequence:\n          - service: \"{{ 'fan.turn_off' if 'fan.' in ventilation_fan else 'switch.turn_off' }}\"\n            target:\n              entity_id: {{ ventilation_fan }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Контроль CO2 та вентиляції\"\n  {% endif %}"
-  },
-  {
-    "id": "security_open_window_alert",
-    "category": "security",
-    "tier": "free",
-    "title": {
-      "uk": "Нагадування про відкрите вікно",
-      "en": "Open Window Reminder"
-    },
-    "description": {
-      "uk": "Надсилає сповіщення, якщо вікно або двері відкриті занадто довго під час роботи кондиціонера.",
-      "en": "Sends an alert if a window or door is left open while the AC/heater is running."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Відкрите вікно",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "window_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик вікна/дверей",
-            "en": "Window/Door Sensor"
-          }
-        },
-        {
-          "id": "climate_entity",
-          "type": "entity_id",
-          "allowed_domains": [
-            "climate"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Кондиціонер / Опалення",
-            "en": "Climate / HVAC Entity"
-          }
-        },
-        {
-          "id": "timeout_minutes",
+          "id": "dose_seconds",
           "type": "number",
           "required": true,
           "min": 1,
           "max": 60,
           "default": 5,
           "label": {
-            "uk": "Таймаут до сповіщення (хв)",
-            "en": "Timeout before alert (min)"
+            "uk": "Тривалість одного дозування (секунди)",
+            "en": "Single Dose Duration (seconds)"
+          }
+        },
+        {
+          "id": "pause_seconds",
+          "type": "number",
+          "required": true,
+          "min": 30,
+          "max": 600,
+          "default": 120,
+          "label": {
+            "uk": "Пауза на перемішування (секунди)",
+            "en": "Mixing Pause Duration (seconds)"
+          }
+        },
+        {
+          "id": "max_cycles",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 20,
+          "default": 5,
+          "label": {
+            "uk": "Максимальна кількість циклів",
+            "en": "Maximum Number of Cycles"
+          }
+        },
+        {
+          "id": "max_run_minutes",
+          "type": "number",
+          "required": true,
+          "min": 5,
+          "max": 120,
+          "default": 30,
+          "label": {
+            "uk": "Аварійний тайм-аут (хвилини)",
+            "en": "Emergency Timeout (minutes)"
+          }
+        },
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "default": true,
+          "label": {
+            "uk": "Надсилати сповіщення у Telegram",
+            "en": "Send Telegram Notification"
           }
         },
         {
@@ -2179,24 +2158,24 @@
           "default": "notify.telegram",
           "label": {
             "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
+            "en": "Telegram Notify Service Name"
           }
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Попередження про відкрите вікно при увімкненому кліматі.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: {{ timeout_minutes }}\ncondition:\n  - condition: not\n    conditions:\n      - condition: state\n        entity_id: {{ climate_entity }}\n        state: \"off\"\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Вікно відкрите більше {{ timeout_minutes }} хв, а клімат ({{ climate_entity }}) увімкнено! Закрийте вікно або вимкніть кондиціонер.\"\n\n  {% endif %}"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Дозування pH з лімітом циклів та паузою на перемішування.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ ph_sensor }}\n    above: {{ target_ph_max }}\naction:\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚗️ pH вище норми ({% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}). Починаю дозування.\"\n  {% endif %}\n  {% endif %}\n  - repeat:\n      count: {{ max_cycles }}\n      sequence:\n        - service: switch.turn_on\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ dose_seconds }}\n        - service: switch.turn_off\n          target:\n            entity_id: {{ dosing_pump }}\n        - delay:\n            seconds: {{ pause_seconds }}\n        - condition: numeric_state\n          entity_id: {{ ph_sensor }}\n          above: {{ target_ph_max }}\n  - service: switch.turn_off\n    target:\n      entity_id: {{ dosing_pump }}\n  {% if enable_telegram and telegram_notify_service %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"✅ Дозування pH завершено. Поточний pH: {% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}.\"\n  {% endif %}\nmax_exceeded: silent\n"
   },
   {
-    "id": "security_night_light",
+    "id": "security_auto_leak",
     "category": "security",
     "tier": "free",
     "title": {
-      "uk": "Нічна підсвітка за рухом",
-      "en": "Motion Night Light"
+      "uk": "Автоматичний захист від протікань",
+      "en": "Automatic Water Leak Protection"
     },
     "description": {
-      "uk": "Вмикає м'яке світло вночі при виявленні руху.",
-      "en": "Turns on dim light at night when motion is detected."
+      "uk": "Миттєве перекриття крана при спрацюванні датчика протікання та сповіщення на телефон.",
+      "en": "Instantly shuts off water valve upon leak detection and sends notification."
     },
     "form_schema": {
       "fields": [
@@ -2214,78 +2193,35 @@
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Нічна підсвітка",
+          "default": "Захист від потопу",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "motion_sensor",
+          "id": "leak_sensor",
           "type": "entity_id",
           "allowed_domains": [
             "binary_sensor"
           ],
           "required": true,
           "label": {
-            "uk": "Датчик руху",
-            "en": "Motion Sensor"
+            "uk": "Датчик протікання",
+            "en": "Leak Sensor"
           }
         },
         {
-          "id": "night_light",
+          "id": "water_valve",
           "type": "entity_id",
           "allowed_domains": [
-            "light"
+            "switch",
+            "valve"
           ],
           "required": true,
           "label": {
-            "uk": "Лампа (з підтримкою яскравості)",
-            "en": "Light (dimmable)"
-          }
-        },
-        {
-          "id": "brightness_pct",
-          "type": "number",
-          "required": true,
-          "min": 1,
-          "max": 100,
-          "default": 15,
-          "label": {
-            "uk": "Яскравість (%)",
-            "en": "Brightness (%)"
-          }
-        },
-        {
-          "id": "start_time",
-          "type": "time",
-          "required": true,
-          "default": "23:00:00",
-          "label": {
-            "uk": "Початок нічного часу",
-            "en": "Night Time Start"
-          }
-        },
-        {
-          "id": "end_time",
-          "type": "time",
-          "required": true,
-          "default": "06:00:00",
-          "label": {
-            "uk": "Кінець нічного часу",
-            "en": "Night Time End"
-          }
-        },
-        {
-          "id": "duration_minutes",
-          "type": "number",
-          "required": true,
-          "min": 1,
-          "max": 30,
-          "default": 3,
-          "label": {
-            "uk": "Час роботи світла (хв)",
-            "en": "Light duration (min)"
+            "uk": "Кран перекриття води",
+            "en": "Water Shutoff Valve"
           }
         },
         {
@@ -2300,7 +2236,7 @@
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Нічна підсвітка коридору.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"on\"\ncondition:\n  - condition: time\n    after: \"{{ start_time }}\"\n    before: \"{{ end_time }}\"\naction:\n  - service: light.turn_on\n    target:\n      entity_id: {{ night_light }}\n    data:\n      brightness_pct: {{ brightness_pct }}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ motion_sensor }}\n        to: \"off\"\n        for:\n          minutes: {{ duration_minutes }}\n  - service: light.turn_off\n    target:\n      entity_id: {{ night_light }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічна підсвітка за рухом\"\n  {% endif %}"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Захист від протікання води (перекриття крана).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚨 АВАРІЯ! Виявлено протікання води! Воду автоматично перекрито.\"\n\n  {% endif %}"
   },
   {
     "id": "security_full_alarm",
@@ -2474,275 +2410,16 @@
     "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Комплексне реагування на протікання води (Кран + Голос + Telegram).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n  - service: tts.google_translate_say\n    target:\n      entity_id: {{ media_player }}\n    data:\n      message: \"Увага! Виявлено протікання води. Кран автоматично перекрито.\"\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌊 АВАРІЯ! Виявлено протікання води! Водопостачання перекрито.\"\n\n  {% endif %}"
   },
   {
-    "id": "energy_blackout_monitor",
-    "category": "energy",
-    "tier": "free",
-    "title": {
-      "uk": "Система сповіщень про блекаути / вимкнення світла",
-      "en": "Blackout / Power Outage Monitor"
-    },
-    "description": {
-      "uk": "Моніторинг стану мережі/UPS та відправка сповіщень у Telegram із вказуванням часу роботи від батареї.",
-      "en": "Monitors grid/UPS status and sends Telegram alerts with battery time."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Сповіщення про блекаут",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "grid_status_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor",
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик наявності 220В",
-            "en": "Grid Status Sensor (220V)"
-          }
-        },
-        {
-          "id": "ups_battery_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": false,
-          "label": {
-            "uk": "Датчик заряду UPS (%)",
-            "en": "UPS Battery Level (%)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Моніторинг стану мережі та відправка сповіщень.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ grid_status_sensor }}\naction:\n  - choose:\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"off\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"🚨 Блекаут! Електропостачання вимкнено. {% if ups_battery_sensor %}Заряд батареї: {{ '{{' }} states('{{ ups_battery_sensor }}') {{ '}}' }}%{% endif %}\"\n          {% endif %}\n      - conditions:\n          - condition: state\n            entity_id: {{ grid_status_sensor }}\n            state: \"on\"\n        sequence:\n          - delay: '00:00:01'\n          {% if enable_telegram %}\n          - service: {{ telegram_notify_service }}\n            data:\n              message: \"💡 Світло з'явилося! Електропостачання відновлено.\"\n          {% endif %}"
-  },
-  {
-    "id": "energy_dynamic_charging",
-    "category": "energy",
-    "tier": "free",
-    "title": {
-      "uk": "Динамічна зарядка за нічним тарифом",
-      "en": "Dynamic Night Tariff Charging"
-    },
-    "description": {
-      "uk": "Автоматичне увімкнення зарядки при низькому тарифі та вимкнення при досягненні 100% або на початку пікового тарифу.",
-      "en": "Auto starts charging on low tariff and stops when 100% or peak tariff starts."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Зарядка за розкладом",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "charger_switch",
-          "type": "entity_id",
-          "allowed_domains": [
-            "switch"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Реле зарядного пристрою",
-            "en": "Charger Relay Switch"
-          }
-        },
-        {
-          "id": "battery_level_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик заряду станції (%)",
-            "en": "Station Battery Level Sensor (%)"
-          }
-        },
-        {
-          "id": "tariff_start",
-          "type": "string",
-          "required": true,
-          "default": "23:00:00",
-          "label": {
-            "uk": "Початок нічного тарифу",
-            "en": "Night Tariff Start Time"
-          }
-        },
-        {
-          "id": "tariff_end",
-          "type": "string",
-          "required": true,
-          "default": "07:00:00",
-          "label": {
-            "uk": "Кінець нічного тарифу",
-            "en": "Night Tariff End Time"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Динамічна зарядка акумуляторів / станцій за нічним тарифом.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ tariff_start }}\"\n    id: \"start_tariff\"\n  - platform: time\n    at: \"{{ tariff_end }}\"\n    id: \"end_tariff\"\n  - platform: numeric_state\n    entity_id: {{ battery_level_sensor }}\n    above: 99\n    id: \"full_battery\"\naction:\n  - choose:\n      - conditions:\n          - condition: trigger\n            id: \"start_tariff\"\n          - condition: numeric_state\n            entity_id: {{ battery_level_sensor }}\n            below: 100\n        sequence:\n          - service: switch.turn_on\n            target:\n              entity_id: {{ charger_switch }}\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"end_tariff\"\n              - condition: trigger\n                id: \"full_battery\"\n        sequence:\n          - service: switch.turn_off\n            target:\n              entity_id: {{ charger_switch }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Динамічна зарядка за нічним тарифом\"\n  {% endif %}"
-  },
-  {
-    "id": "climate_smart_presence",
-    "category": "climate",
-    "tier": "free",
-    "title": {
-      "uk": "Розумне керування кліматом (присутність і вікна)",
-      "en": "Smart Climate Control (Presence & Windows)"
-    },
-    "description": {
-      "uk": "Вимкнення клімату, якщо вікно відкрите більше 2 хвилин, або якщо в кімнаті немає руху.",
-      "en": "Turns off climate if window is open for 2 mins or no presence detected."
-    },
-    "form_schema": {
-      "fields": [
-        {
-          "id": "enable_telegram",
-          "type": "boolean",
-          "required": false,
-          "default": false,
-          "label": {
-            "uk": "Надсилати сповіщення в Telegram",
-            "en": "Send Telegram Notification"
-          }
-        },
-        {
-          "id": "automation_title",
-          "type": "string",
-          "required": true,
-          "default": "Смарт Клімат Контроль",
-          "label": {
-            "uk": "Назва автоматизації",
-            "en": "Automation Title"
-          }
-        },
-        {
-          "id": "climate_entity",
-          "type": "entity_id",
-          "allowed_domains": [
-            "climate"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Кондиціонер / Термостат",
-            "en": "Air Conditioner / Thermostat"
-          }
-        },
-        {
-          "id": "window_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик вікна",
-            "en": "Window Sensor"
-          }
-        },
-        {
-          "id": "motion_sensor",
-          "type": "entity_id",
-          "allowed_domains": [
-            "binary_sensor"
-          ],
-          "required": true,
-          "label": {
-            "uk": "Датчик руху",
-            "en": "Motion Sensor"
-          }
-        },
-        {
-          "id": "no_motion_minutes",
-          "type": "number",
-          "required": true,
-          "default": 30,
-          "label": {
-            "uk": "Таймаут відсутності руху (хв)",
-            "en": "No Motion Timeout (mins)"
-          }
-        },
-        {
-          "id": "telegram_notify_service",
-          "type": "string",
-          "required": false,
-          "default": "notify.telegram",
-          "label": {
-            "uk": "Ім'я notify-сервісу Telegram",
-            "en": "Telegram Notify Service"
-          }
-        }
-      ]
-    },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Вимкнення клімату при відкритому вікні або відсутності людей.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: 2\n    id: \"window_open\"\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"off\"\n    for:\n      minutes: {{ no_motion_minutes }}\n    id: \"no_motion\"\naction:\n  - choose:\n      - conditions:\n          - condition: or\n            conditions:\n              - condition: trigger\n                id: \"window_open\"\n              - condition: trigger\n                id: \"no_motion\"\n        sequence:\n          - service: climate.turn_off\n            target:\n              entity_id: {{ climate_entity }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Розумне керування кліматом (присутність і вікна)\"\n  {% endif %}"
-  },
-  {
-    "id": "security_auto_leak",
+    "id": "security_leak_protection",
     "category": "security",
     "tier": "free",
     "title": {
-      "uk": "Автоматичний захист від протікань",
-      "en": "Automatic Water Leak Protection"
+      "uk": "Захист від протікання",
+      "en": "Water Leak Protection"
     },
     "description": {
-      "uk": "Миттєве перекриття крана при спрацюванні датчика протікання та сповіщення на телефон.",
-      "en": "Instantly shuts off water valve upon leak detection and sends notification."
+      "uk": "Автоматично перекриває кран водопостачання при спрацюванні датчика протікання води.",
+      "en": "Automatically shuts off the main water valve when a water leak is detected."
     },
     "form_schema": {
       "fields": [
@@ -2770,12 +2447,13 @@
           "id": "leak_sensor",
           "type": "entity_id",
           "allowed_domains": [
-            "binary_sensor"
+            "binary_sensor",
+            "sensor"
           ],
           "required": true,
           "label": {
             "uk": "Датчик протікання",
-            "en": "Leak Sensor"
+            "en": "Water Leak Sensor"
           }
         },
         {
@@ -2787,8 +2465,8 @@
           ],
           "required": true,
           "label": {
-            "uk": "Кран перекриття води",
-            "en": "Water Shutoff Valve"
+            "uk": "Реле водяного крана",
+            "en": "Main Water Valve Switch"
           }
         },
         {
@@ -2803,19 +2481,19 @@
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Захист від протікання води (перекриття крана).\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚨 АВАРІЯ! Виявлено протікання води! Воду автоматично перекрито.\"\n\n  {% endif %}"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Авто-перекриття крана при протіканні.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ leak_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_off\n    target:\n      entity_id: {{ water_valve }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Захист від протікання\"\n  {% endif %}"
   },
   {
-    "id": "climate_co2_notify",
-    "category": "climate",
+    "id": "security_night_light",
+    "category": "security",
     "tier": "free",
     "title": {
-      "uk": "Сповіщення про необхідність провітрювання",
-      "en": "CO2 Ventilation Notification"
+      "uk": "Нічна підсвітка за рухом",
+      "en": "Motion Night Light"
     },
     "description": {
-      "uk": "Індикація або сповіщення, коли рівень CO₂ перевищує 1000 ppm.",
-      "en": "Indication or notification when CO2 levels exceed 1000 ppm."
+      "uk": "Вмикає м'яке світло вночі при виявленні руху.",
+      "en": "Turns on dim light at night when motion is detected."
     },
     "form_schema": {
       "fields": [
@@ -2833,32 +2511,78 @@
           "id": "automation_title",
           "type": "string",
           "required": true,
-          "default": "Моніторинг CO2",
+          "default": "Нічна підсвітка",
           "label": {
             "uk": "Назва автоматизації",
             "en": "Automation Title"
           }
         },
         {
-          "id": "co2_sensor",
+          "id": "motion_sensor",
           "type": "entity_id",
           "allowed_domains": [
-            "sensor"
+            "binary_sensor"
           ],
           "required": true,
           "label": {
-            "uk": "Датчик CO2",
-            "en": "CO2 Sensor"
+            "uk": "Датчик руху",
+            "en": "Motion Sensor"
           }
         },
         {
-          "id": "co2_threshold",
+          "id": "night_light",
+          "type": "entity_id",
+          "allowed_domains": [
+            "light"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Лампа (з підтримкою яскравості)",
+            "en": "Light (dimmable)"
+          }
+        },
+        {
+          "id": "brightness_pct",
           "type": "number",
           "required": true,
-          "default": 1000,
+          "min": 1,
+          "max": 100,
+          "default": 15,
           "label": {
-            "uk": "Поріг CO2 (ppm)",
-            "en": "CO2 Threshold (ppm)"
+            "uk": "Яскравість (%)",
+            "en": "Brightness (%)"
+          }
+        },
+        {
+          "id": "start_time",
+          "type": "time",
+          "required": true,
+          "default": "23:00:00",
+          "label": {
+            "uk": "Початок нічного часу",
+            "en": "Night Time Start"
+          }
+        },
+        {
+          "id": "end_time",
+          "type": "time",
+          "required": true,
+          "default": "06:00:00",
+          "label": {
+            "uk": "Кінець нічного часу",
+            "en": "Night Time End"
+          }
+        },
+        {
+          "id": "duration_minutes",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 30,
+          "default": 3,
+          "label": {
+            "uk": "Час роботи світла (хв)",
+            "en": "Light duration (min)"
           }
         },
         {
@@ -2873,6 +2597,282 @@
         }
       ]
     },
-    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Сповіщення про високий рівень CO2.\"\nmode: single\ntrigger:\n  - platform: numeric_state\n    entity_id: {{ co2_sensor }}\n    above: {{ co2_threshold }}\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🌬️ Увага! Рівень CO2 перевищив норму ({% raw %}{{ states('{{ co2_sensor }}') }}{% endraw %} ppm). Рекомендується провітрити приміщення.\"\n\n  {% endif %}"
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Нічна підсвітка коридору.\"\nmode: restart\ntrigger:\n  - platform: state\n    entity_id: {{ motion_sensor }}\n    to: \"on\"\ncondition:\n  - condition: time\n    after: \"{{ start_time }}\"\n    before: \"{{ end_time }}\"\naction:\n  - service: light.turn_on\n    target:\n      entity_id: {{ night_light }}\n    data:\n      brightness_pct: {{ brightness_pct }}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ motion_sensor }}\n        to: \"off\"\n        for:\n          minutes: {{ duration_minutes }}\n  - service: light.turn_off\n    target:\n      entity_id: {{ night_light }}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Нічна підсвітка за рухом\"\n  {% endif %}"
+  },
+  {
+    "id": "security_open_window_alert",
+    "category": "security",
+    "tier": "free",
+    "title": {
+      "uk": "Нагадування про відкрите вікно",
+      "en": "Open Window Reminder"
+    },
+    "description": {
+      "uk": "Надсилає сповіщення, якщо вікно або двері відкриті занадто довго під час роботи кондиціонера.",
+      "en": "Sends an alert if a window or door is left open while the AC/heater is running."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Відкрите вікно",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "window_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик вікна/дверей",
+            "en": "Window/Door Sensor"
+          }
+        },
+        {
+          "id": "climate_entity",
+          "type": "entity_id",
+          "allowed_domains": [
+            "climate"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Кондиціонер / Опалення",
+            "en": "Climate / HVAC Entity"
+          }
+        },
+        {
+          "id": "timeout_minutes",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 60,
+          "default": 5,
+          "label": {
+            "uk": "Таймаут до сповіщення (хв)",
+            "en": "Timeout before alert (min)"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Попередження про відкрите вікно при увімкненому кліматі.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ window_sensor }}\n    to: \"on\"\n    for:\n      minutes: {{ timeout_minutes }}\ncondition:\n  - condition: not\n    conditions:\n      - condition: state\n        entity_id: {{ climate_entity }}\n        state: \"off\"\naction:\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"⚠️ УВАГА! Вікно відкрите більше {{ timeout_minutes }} хв, а клімат ({{ climate_entity }}) увімкнено! Закрийте вікно або вимкніть кондиціонер.\"\n\n  {% endif %}"
+  },
+  {
+    "id": "security_presence_simulation",
+    "category": "security",
+    "tier": "pro_only",
+    "title": {
+      "uk": "Імітація присутності вдома",
+      "en": "Presence Simulation"
+    },
+    "description": {
+      "uk": "Випадкове увімкнення та вимкнення світла ввечері, щоб створити ілюзію присутності людей вдома.",
+      "en": "Randomly toggles lights in the evening to create an illusion that someone is at home."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "label": {
+            "uk": "Надсилати сповіщення в Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Імітація присутності",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "light_1",
+          "type": "entity_id",
+          "allowed_domains": [
+            "light",
+            "switch"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Світло 1 (наприклад, вітальня)",
+            "en": "Light 1 (e.g. Living Room)"
+          }
+        },
+        {
+          "id": "light_2",
+          "type": "entity_id",
+          "allowed_domains": [
+            "light",
+            "switch"
+          ],
+          "required": false,
+          "label": {
+            "uk": "Світло 2 (опціонально)",
+            "en": "Light 2 (Optional)"
+          }
+        },
+        {
+          "id": "start_time",
+          "type": "time",
+          "required": true,
+          "default": "18:00:00",
+          "label": {
+            "uk": "Час початку симуляції",
+            "en": "Simulation Start Time"
+          }
+        },
+        {
+          "id": "end_time",
+          "type": "time",
+          "required": true,
+          "default": "23:00:00",
+          "label": {
+            "uk": "Час завершення",
+            "en": "Simulation End Time"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Імітація присутності вдома.\"\nmode: restart\ntrigger:\n  - platform: time\n    at: \"{{ start_time }}\"\ncondition: []\naction:\n  - repeat:\n      while:\n        - condition: time\n          before: \"{{ end_time }}\"\n      sequence:\n        - delay:\n            minutes: \"{% raw %}{{ range(10, 45) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_1 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_1 }}\n        {% if light_2 %}\n        - delay:\n            minutes: \"{% raw %}{{ range(5, 20) | random }}{% endraw %}\"\n        - service: \"{{ 'light.toggle' if 'light.' in light_2 else 'switch.toggle' }}\"\n          target:\n            entity_id: {{ light_2 }}\n        {% endif %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_1 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_1 }}\n  {% if light_2 %}\n  - service: \"{{ 'light.turn_off' if 'light.' in light_2 else 'switch.turn_off' }}\"\n    target:\n      entity_id: {{ light_2 }}\n  {% endif %}\n\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"Спрацювала автоматизація: Імітація присутності вдома\"\n  {% endif %}"
+  },
+  {
+    "id": "tank_guard_basic",
+    "category": "irrigation",
+    "tier": "free",
+    "title": {
+      "uk": "Наповнення бака з захистом та тайм-аутом",
+      "en": "Water Tank Filling with Safety Timeout"
+    },
+    "description": {
+      "uk": "Автоматично вмикає клапан/насос подачі води за нижнім датчиком рівня та вимикає за верхнім з аварійним тайм-аутом.",
+      "en": "Automatically turns on filling valve/pump via low sensor and off via high sensor with emergency timeout protection."
+    },
+    "form_schema": {
+      "fields": [
+        {
+          "id": "automation_title",
+          "type": "string",
+          "required": true,
+          "default": "Автоматика наповнення бака",
+          "label": {
+            "uk": "Назва автоматизації",
+            "en": "Automation Title"
+          }
+        },
+        {
+          "id": "valve_switch",
+          "type": "entity_id",
+          "allowed_domains": [
+            "switch",
+            "valve"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Реле клапана або насоса",
+            "en": "Valve or Pump Relay Switch"
+          }
+        },
+        {
+          "id": "low_level_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor",
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик нижнього (критичного) рівня",
+            "en": "Low Level Water Sensor"
+          }
+        },
+        {
+          "id": "high_level_sensor",
+          "type": "entity_id",
+          "allowed_domains": [
+            "binary_sensor",
+            "sensor"
+          ],
+          "required": true,
+          "label": {
+            "uk": "Датчик верхнього (повного) рівня",
+            "en": "High Level Water Sensor"
+          }
+        },
+        {
+          "id": "max_run_minutes",
+          "type": "number",
+          "required": true,
+          "min": 1,
+          "max": 300,
+          "default": 30,
+          "label": {
+            "uk": "Максимальний час наповнення (хвилини)",
+            "en": "Max Fill Duration Timeout (minutes)"
+          }
+        },
+        {
+          "id": "enable_telegram",
+          "type": "boolean",
+          "default": true,
+          "label": {
+            "uk": "Надсилати сповіщення у Telegram",
+            "en": "Send Telegram Notification"
+          }
+        },
+        {
+          "id": "telegram_notify_service",
+          "type": "string",
+          "required": false,
+          "default": "notify.telegram",
+          "label": {
+            "uk": "Ім'я notify-сервісу Telegram",
+            "en": "Telegram Notify Service Name"
+          }
+        }
+      ]
+    },
+    "jinja_yaml_template": "alias: \"{{ automation_title }}\"\ndescription: \"Автоматичне наповнення бака з аварійним вимкненням за таймером.\"\nmode: single\ntrigger:\n  - platform: state\n    entity_id: {{ low_level_sensor }}\n    to: \"on\"\naction:\n  - service: switch.turn_on\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  {% if enable_telegram %}\n  - service: {{ telegram_notify_service }}\n    data:\n      message: \"🚰 Наповнення бака розпочато.\"\n  {% endif %}\n  {% endif %}\n  - wait_for_trigger:\n      - platform: state\n        entity_id: {{ high_level_sensor }}\n        to: \"on\"\n    timeout:\n      minutes: {{ max_run_minutes }}\n    continue_on_timeout: true\n  - service: switch.turn_off\n    target:\n      entity_id: {{ valve_switch }}\n  {% if enable_telegram and telegram_notify_service %}\n  - if:\n      - condition: template\n        value_template: \"{% raw %}{{ wait.completed == false }}{% endraw %}\"\n    then:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"⚠️ УВАГА! Наповнення бака зупинено за ТАЙМ-АУТОМ ({{ max_run_minutes }} хв)! Перевірте датчик або насос.\"\n    else:\n      - service: {{ telegram_notify_service }}\n        data:\n          message: \"✅ Бак успішно наповнено.\"\n  {% endif %}\n"
   }
 ]

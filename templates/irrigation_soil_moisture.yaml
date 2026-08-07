@@ -1,0 +1,90 @@
+id: irrigation_soil_moisture
+category: irrigation
+tier: free
+title:
+  uk: Полив за датчиком вологості ґрунту
+  en: Soil Moisture based Irrigation
+description:
+  uk: Вмикає клапан поливу, якщо вологість ґрунту падає нижче норми.
+  en: Turns on irrigation valve if soil moisture drops below threshold.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Полив за вологістю ґрунту
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: soil_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик вологості ґрунту (%)
+        en: Soil Moisture Sensor (%)
+    - id: moisture_threshold
+      type: number
+      required: true
+      min: 10
+      max: 90
+      default: 30
+      label:
+        uk: Мінімальна вологість (%)
+        en: Minimum Moisture (%)
+    - id: irrigation_valve
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Клапан поливу
+        en: Irrigation Valve
+    - id: duration_minutes
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 15
+      label:
+        uk: Тривалість поливу (хв)
+        en: Irrigation Duration (min)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Полив при низькій вологості ґрунту."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ soil_sensor }}
+      below: {{ moisture_threshold }}
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: {{ irrigation_valve }}
+    - delay:
+        minutes: {{ duration_minutes }}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ irrigation_valve }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Полив за датчиком вологості ґрунту"
+    {% endif %}

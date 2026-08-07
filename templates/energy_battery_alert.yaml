@@ -1,0 +1,65 @@
+id: energy_battery_alert
+category: energy
+tier: free
+title:
+  uk: Сповіщення про низький заряд АКБ
+  en: Low Battery Alert
+description:
+  uk: Надсилає повідомлення в Telegram, коли заряд акумулятора (чи телефона) падає
+    нижче заданого рівня.
+  en: Sends a Telegram alert when the battery level drops below a specified threshold.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Низький заряд батареї
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: battery_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик заряду (Battery %)
+        en: Battery Sensor (%)
+    - id: threshold
+      type: number
+      required: true
+      min: 1
+      max: 100
+      default: 20
+      label:
+        uk: Поріг заряду (%)
+        en: Battery Threshold (%)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Сповіщення про низький заряд акумулятора."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ battery_sensor }}
+      below: {{ threshold }}
+  action:
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "⚠️ УВАГА! Заряд батареї впав нижче {{ threshold }}%!"
+
+    {% endif %}

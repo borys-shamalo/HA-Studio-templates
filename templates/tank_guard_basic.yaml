@@ -1,0 +1,111 @@
+id: tank_guard_basic
+category: irrigation
+tier: free
+title:
+  uk: Наповнення бака з захистом та тайм-аутом
+  en: Water Tank Filling with Safety Timeout
+description:
+  uk: Автоматично вмикає клапан/насос подачі води за нижнім датчиком рівня та вимикає
+    за верхнім з аварійним тайм-аутом.
+  en: Automatically turns on filling valve/pump via low sensor and off via high sensor
+    with emergency timeout protection.
+form_schema:
+  fields:
+    - id: automation_title
+      type: string
+      required: true
+      default: Автоматика наповнення бака
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: valve_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Реле клапана або насоса
+        en: Valve or Pump Relay Switch
+    - id: low_level_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик нижнього (критичного) рівня
+        en: Low Level Water Sensor
+    - id: high_level_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик верхнього (повного) рівня
+        en: High Level Water Sensor
+    - id: max_run_minutes
+      type: number
+      required: true
+      min: 1
+      max: 300
+      default: 30
+      label:
+        uk: Максимальний час наповнення (хвилини)
+        en: Max Fill Duration Timeout (minutes)
+    - id: enable_telegram
+      type: boolean
+      default: true
+      label:
+        uk: Надсилати сповіщення у Telegram
+        en: Send Telegram Notification
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service Name
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Автоматичне наповнення бака з аварійним вимкненням за таймером."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ low_level_sensor }}
+      to: "on"
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: {{ valve_switch }}
+    {% if enable_telegram and telegram_notify_service %}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🚰 Наповнення бака розпочато."
+    {% endif %}
+    {% endif %}
+    - wait_for_trigger:
+        - platform: state
+          entity_id: {{ high_level_sensor }}
+          to: "on"
+      timeout:
+        minutes: {{ max_run_minutes }}
+      continue_on_timeout: true
+    - service: switch.turn_off
+      target:
+        entity_id: {{ valve_switch }}
+    {% if enable_telegram and telegram_notify_service %}
+    - if:
+        - condition: template
+          value_template: "{% raw %}{{ wait.completed == false }}{% endraw %}"
+      then:
+        - service: {{ telegram_notify_service }}
+          data:
+            message: "⚠️ УВАГА! Наповнення бака зупинено за ТАЙМ-АУТОМ ({{ max_run_minutes }} хв)! Перевірте датчик або насос."
+      else:
+        - service: {{ telegram_notify_service }}
+          data:
+            message: "✅ Бак успішно наповнено."
+    {% endif %}

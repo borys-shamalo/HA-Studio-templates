@@ -1,0 +1,68 @@
+id: security_auto_leak
+category: security
+tier: free
+title:
+  uk: Автоматичний захист від протікань
+  en: Automatic Water Leak Protection
+description:
+  uk: Миттєве перекриття крана при спрацюванні датчика протікання та сповіщення на
+    телефон.
+  en: Instantly shuts off water valve upon leak detection and sends notification.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Захист від потопу
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: leak_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик протікання
+        en: Leak Sensor
+    - id: water_valve
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Кран перекриття води
+        en: Water Shutoff Valve
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Захист від протікання води (перекриття крана)."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ leak_sensor }}
+      to: "on"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: {{ water_valve }}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🚨 АВАРІЯ! Виявлено протікання води! Воду автоматично перекрито."
+
+    {% endif %}

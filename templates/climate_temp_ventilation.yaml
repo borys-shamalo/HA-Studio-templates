@@ -1,0 +1,94 @@
+id: climate_temp_ventilation
+category: climate
+tier: free
+title:
+  uk: Провітрювання за температурою
+  en: Temperature-based Ventilation
+description:
+  uk: Вмикає витяжку або відкриває кватирку, якщо температура перевищує заданий поріг.
+  en: Turns on exhaust fan or opens a window if temperature exceeds a certain threshold.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Провітрювання
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: temp_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик температури
+        en: Temperature Sensor
+    - id: fan_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+        - fan
+        - cover
+      required: true
+      label:
+        uk: Витяжка або кватирка
+        en: Fan or Window Cover
+    - id: max_temp
+      type: number
+      required: true
+      min: 0
+      max: 100
+      default: 25
+      label:
+        uk: Максимальна температура (°C)
+        en: Max Temperature (°C)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Провітрювання за температурою."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ temp_sensor }}
+      above: {{ max_temp }}
+      id: "too_hot"
+    - platform: numeric_state
+      entity_id: {{ temp_sensor }}
+      below: {{ max_temp - 2 }}
+      id: "cooled_down"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "too_hot"
+          sequence:
+            - service: "{{ 'cover.open_cover' if 'cover.' in fan_switch else 'switch.turn_on' }}"
+              target:
+                entity_id: {{ fan_switch }}
+        - conditions:
+            - condition: trigger
+              id: "cooled_down"
+          sequence:
+            - service: "{{ 'cover.close_cover' if 'cover.' in fan_switch else 'switch.turn_off' }}"
+              target:
+                entity_id: {{ fan_switch }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Провітрювання за температурою"
+    {% endif %}

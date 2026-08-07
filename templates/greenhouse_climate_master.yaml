@@ -1,0 +1,150 @@
+id: greenhouse_climate_master
+category: climate
+tier: pro_only
+title:
+  uk: Комплексний клімат-контроль теплиці
+  en: Greenhouse Climate Master
+description:
+  uk: Автоматичне управління вентиляцією, зволоженням та обігрівом за гістерезисом
+    з аварійними сповіщеннями.
+  en: Automated ventilation, humidification, and heating control with hysteresis and
+    safety alerts.
+form_schema:
+  fields:
+    - id: temp_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик температури
+        en: Temperature Sensor
+    - id: humidity_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик вологості
+        en: Humidity Sensor
+    - id: target_temp
+      type: number
+      required: true
+      default: 24.0
+      min: 10.0
+      max: 40.0
+      label:
+        uk: Цільова температура (°C)
+        en: Target Temperature (°C)
+    - id: temp_hysteresis
+      type: number
+      required: true
+      default: 1.5
+      min: 0.1
+      max: 10.0
+      label:
+        uk: Гістерезис температури (°C)
+        en: Temperature Hysteresis (°C)
+    - id: target_humidity
+      type: number
+      required: true
+      default: 60.0
+      min: 30.0
+      max: 90.0
+      label:
+        uk: Цільова вологість (%)
+        en: Target Humidity (%)
+    - id: window_actuator
+      type: entity_id
+      allowed_domains:
+        - cover
+        - switch
+      required: true
+      label:
+        uk: Сервопривід вікна / Витяжка
+        en: Window Actuator / Exhaust Fan
+    - id: dehumidifier_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Осушувач / Зволожувач
+        en: Dehumidifier / Humidifier Switch
+    - id: enable_telegram
+      type: boolean
+      default: true
+      label:
+        uk: Ввімкнути PUSH-сповіщення
+        en: Enable PUSH Notifications
+    - id: telegram_target
+      type: string
+      default: notify.telegram
+      required: false
+      label:
+        uk: Сервіс сповіщень Telegram
+        en: Telegram Notify Service
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "Greenhouse Climate Master"
+  description: "Автоматичне управління вентиляцією та зволоженням."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: {{ temp_sensor }}
+    - platform: state
+      entity_id: {{ humidity_sensor }}
+  action:
+    - choose:
+        - conditions:
+            - condition: numeric_state
+              entity_id: {{ temp_sensor }}
+              above: {{ target_temp + temp_hysteresis }}
+          sequence:
+            - service: "{{ 'cover.open_cover' if 'cover.' in window_actuator else 'switch.turn_on' }}"
+              target:
+                entity_id: {{ window_actuator }}
+            {% if enable_telegram and telegram_target %}
+            - service: {{ telegram_target }}
+              data:
+                message: "🌡️ Температура вище норми. Відкриваю вентиляцію."
+            {% endif %}
+        - conditions:
+            - condition: numeric_state
+              entity_id: {{ temp_sensor }}
+              below: {{ target_temp - temp_hysteresis }}
+          sequence:
+            - service: "{{ 'cover.close_cover' if 'cover.' in window_actuator else 'switch.turn_off' }}"
+              target:
+                entity_id: {{ window_actuator }}
+            {% if enable_telegram and telegram_target %}
+            - service: {{ telegram_target }}
+              data:
+                message: "❄️ Температура нижче норми. Закриваю вентиляцію."
+            {% endif %}
+    - choose:
+        - conditions:
+            - condition: numeric_state
+              entity_id: {{ humidity_sensor }}
+              above: {{ target_humidity }}
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: {{ dehumidifier_switch }}
+            {% if enable_telegram and telegram_target %}
+            - service: {{ telegram_target }}
+              data:
+                message: "💧 Вологість вище норми. Вмикаю осушувач."
+            {% endif %}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Комплексний клімат-контроль теплиці"
+    {% endif %}

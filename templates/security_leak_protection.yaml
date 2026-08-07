@@ -1,0 +1,69 @@
+id: security_leak_protection
+category: security
+tier: free
+title:
+  uk: Захист від протікання
+  en: Water Leak Protection
+description:
+  uk: Автоматично перекриває кран водопостачання при спрацюванні датчика протікання
+    води.
+  en: Automatically shuts off the main water valve when a water leak is detected.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Захист від потопу
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: leak_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик протікання
+        en: Water Leak Sensor
+    - id: water_valve
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Реле водяного крана
+        en: Main Water Valve Switch
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Авто-перекриття крана при протіканні."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ leak_sensor }}
+      to: "on"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: {{ water_valve }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Захист від протікання"
+    {% endif %}

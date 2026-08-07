@@ -1,0 +1,79 @@
+id: energy_peak_shaving
+category: energy
+tier: pro_only
+title:
+  uk: Балансування навантаження (Peak Shaving)
+  en: Load Balancing (Peak Shaving)
+description:
+  uk: Авто-вимкнення потужного споживача, якщо загальна потужність перевищує ліміт.
+  en: Automatically turns off heavy load if total power consumption exceeds a limit.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Балансування навантаження
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: total_power_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик загальної потужності (Вт)
+        en: Total Power Sensor (W)
+    - id: power_limit
+      type: number
+      required: true
+      min: 500
+      max: 20000
+      default: 5000
+      label:
+        uk: Ліміт потужності (Вт)
+        en: Power Limit (W)
+    - id: heavy_load_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Потужний прилад для вимкнення
+        en: Heavy Load Switch to Turn Off
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Peak shaving: вимкнення приладу при перевищенні ліміту потужності."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ total_power_sensor }}
+      above: {{ power_limit }}
+      for:
+        seconds: 30
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: {{ heavy_load_switch }}
+    {% if telegram_notify_service %}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "⚡ Перевищено ліміт потужності ({{ power_limit }}Вт). Вимкнено потужний прилад для балансування."
+    {% endif %}
+
+    {% endif %}

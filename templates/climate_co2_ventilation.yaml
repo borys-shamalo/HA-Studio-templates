@@ -1,0 +1,123 @@
+id: climate_co2_ventilation
+category: climate
+tier: pro_only
+title:
+  uk: Контроль CO2 та вентиляції
+  en: CO2 & Ventilation Control
+description:
+  uk: Вмикає приточну вентиляцію при підвищенні CO2 із захистом від сильного охолодження
+    кімнати.
+  en: Turns on fresh air ventilation on high CO2, with protection against overcooling
+    the room.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Контроль якості повітря (CO2)
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: co2_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик CO2 (ppm)
+        en: CO2 Sensor (ppm)
+    - id: co2_threshold
+      type: number
+      required: true
+      min: 400
+      max: 2000
+      default: 800
+      label:
+        uk: Поріг CO2 (ppm)
+        en: CO2 Threshold (ppm)
+    - id: ventilation_fan
+      type: entity_id
+      allowed_domains:
+        - switch
+        - fan
+      required: true
+      label:
+        uk: Вентиляція / Бризер
+        en: Ventilation / Fresh Air Fan
+    - id: temp_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик температури в кімнаті
+        en: Room Temperature Sensor
+    - id: min_temp
+      type: number
+      required: true
+      min: 10
+      max: 30
+      default: 18
+      label:
+        uk: Мінімальна дозволена температура (°C)
+        en: Minimum Allowed Temperature (°C)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Вентиляція за рівнем CO2 із термозахистом."
+  mode: restart
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ co2_sensor }}
+      above: {{ co2_threshold }}
+      id: "high_co2"
+    - platform: numeric_state
+      entity_id: {{ co2_sensor }}
+      below: {{ co2_threshold - 100 }}
+      id: "low_co2"
+    - platform: numeric_state
+      entity_id: {{ temp_sensor }}
+      below: {{ min_temp }}
+      id: "too_cold"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "high_co2"
+            - condition: numeric_state
+              entity_id: {{ temp_sensor }}
+              above: {{ min_temp }}
+          sequence:
+            - service: "{{ 'fan.turn_on' if 'fan.' in ventilation_fan else 'switch.turn_on' }}"
+              target:
+                entity_id: {{ ventilation_fan }}
+        - conditions:
+            - condition: or
+              conditions:
+                - condition: trigger
+                  id: "low_co2"
+                - condition: trigger
+                  id: "too_cold"
+          sequence:
+            - service: "{{ 'fan.turn_off' if 'fan.' in ventilation_fan else 'switch.turn_off' }}"
+              target:
+                entity_id: {{ ventilation_fan }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Контроль CO2 та вентиляції"
+    {% endif %}

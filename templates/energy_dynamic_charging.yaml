@@ -1,0 +1,107 @@
+id: energy_dynamic_charging
+category: energy
+tier: free
+title:
+  uk: Динамічна зарядка за нічним тарифом
+  en: Dynamic Night Tariff Charging
+description:
+  uk: Автоматичне увімкнення зарядки при низькому тарифі та вимкнення при досягненні
+    100% або на початку пікового тарифу.
+  en: Auto starts charging on low tariff and stops when 100% or peak tariff starts.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Зарядка за розкладом
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: charger_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле зарядного пристрою
+        en: Charger Relay Switch
+    - id: battery_level_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик заряду станції (%)
+        en: Station Battery Level Sensor (%)
+    - id: tariff_start
+      type: string
+      required: true
+      default: '23:00:00'
+      label:
+        uk: Початок нічного тарифу
+        en: Night Tariff Start Time
+    - id: tariff_end
+      type: string
+      required: true
+      default: 07:00:00
+      label:
+        uk: Кінець нічного тарифу
+        en: Night Tariff End Time
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Динамічна зарядка акумуляторів / станцій за нічним тарифом."
+  mode: restart
+  trigger:
+    - platform: time
+      at: "{{ tariff_start }}"
+      id: "start_tariff"
+    - platform: time
+      at: "{{ tariff_end }}"
+      id: "end_tariff"
+    - platform: numeric_state
+      entity_id: {{ battery_level_sensor }}
+      above: 99
+      id: "full_battery"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "start_tariff"
+            - condition: numeric_state
+              entity_id: {{ battery_level_sensor }}
+              below: 100
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: {{ charger_switch }}
+        - conditions:
+            - condition: or
+              conditions:
+                - condition: trigger
+                  id: "end_tariff"
+                - condition: trigger
+                  id: "full_battery"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: {{ charger_switch }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Динамічна зарядка за нічним тарифом"
+    {% endif %}

@@ -1,0 +1,83 @@
+id: security_full_alarm
+category: security
+tier: pro_only
+title:
+  uk: Повний режим «Охорона дому»
+  en: Full House Alarm System
+description:
+  uk: Вмикає сирену та надсилає тривожне повідомлення, якщо виявлено рух під час активного
+    режиму охорони.
+  en: Triggers siren and sends alerts if motion is detected while armed.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: 'Охорона: Тривога'
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: alarm_panel
+      type: entity_id
+      allowed_domains:
+        - alarm_control_panel
+      required: true
+      label:
+        uk: Панель сигналізації
+        en: Alarm Control Panel
+    - id: motion_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: Датчик руху (тригер тривоги)
+        en: Motion Sensor (Alarm trigger)
+    - id: siren_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+        - siren
+      required: true
+      label:
+        uk: Сирена
+        en: Siren Entity
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Увімкнення сирени при виявленні руху в режимі охорони."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ motion_sensor }}
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: {{ alarm_panel }}
+      state: "armed_away"
+  action:
+    - service: alarm_control_panel.alarm_trigger
+      target:
+        entity_id: {{ alarm_panel }}
+    - service: "{{ 'siren.turn_on' if 'siren.' in siren_switch else 'switch.turn_on' }}"
+      target:
+        entity_id: {{ siren_switch }}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🚨 ТРИВОГА! Виявлено рух під час охорони! Увімкнено сирену."
+
+    {% endif %}

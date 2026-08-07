@@ -1,0 +1,144 @@
+id: ph_dosing_control
+category: irrigation
+tier: pack_only
+title:
+  uk: Дозування pH з лімітом циклів
+  en: pH Dosing with Cycle Limit and Mixing Pause
+description:
+  uk: Дозує pH-розчин порціями з паузою на перемішування, лімітом циклів та аварійним
+    вимкненням при перевищенні часу.
+  en: Doses pH solution in portions with mixing pauses, cycle limit, and emergency
+    shutdown on timeout.
+form_schema:
+  fields:
+    - id: automation_title
+      type: string
+      required: true
+      default: Дозування pH
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: ph_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик pH
+        en: pH Sensor
+    - id: dosing_pump
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле дозуючого насоса
+        en: Dosing Pump Switch
+    - id: target_ph_min
+      type: number
+      required: true
+      min: 4.0
+      max: 7.0
+      default: 5.8
+      label:
+        uk: Мінімальний цільовий pH
+        en: Target pH Minimum
+    - id: target_ph_max
+      type: number
+      required: true
+      min: 5.0
+      max: 8.5
+      default: 6.2
+      label:
+        uk: Максимальний цільовий pH
+        en: Target pH Maximum
+    - id: dose_seconds
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 5
+      label:
+        uk: Тривалість одного дозування (секунди)
+        en: Single Dose Duration (seconds)
+    - id: pause_seconds
+      type: number
+      required: true
+      min: 30
+      max: 600
+      default: 120
+      label:
+        uk: Пауза на перемішування (секунди)
+        en: Mixing Pause Duration (seconds)
+    - id: max_cycles
+      type: number
+      required: true
+      min: 1
+      max: 20
+      default: 5
+      label:
+        uk: Максимальна кількість циклів
+        en: Maximum Number of Cycles
+    - id: max_run_minutes
+      type: number
+      required: true
+      min: 5
+      max: 120
+      default: 30
+      label:
+        uk: Аварійний тайм-аут (хвилини)
+        en: Emergency Timeout (minutes)
+    - id: enable_telegram
+      type: boolean
+      default: true
+      label:
+        uk: Надсилати сповіщення у Telegram
+        en: Send Telegram Notification
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service Name
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Дозування pH з лімітом циклів та паузою на перемішування."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ ph_sensor }}
+      above: {{ target_ph_max }}
+  action:
+    {% if enable_telegram and telegram_notify_service %}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "⚗️ pH вище норми ({% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}). Починаю дозування."
+    {% endif %}
+    {% endif %}
+    - repeat:
+        count: {{ max_cycles }}
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: {{ dosing_pump }}
+          - delay:
+              seconds: {{ dose_seconds }}
+          - service: switch.turn_off
+            target:
+              entity_id: {{ dosing_pump }}
+          - delay:
+              seconds: {{ pause_seconds }}
+          - condition: numeric_state
+            entity_id: {{ ph_sensor }}
+            above: {{ target_ph_max }}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ dosing_pump }}
+    {% if enable_telegram and telegram_notify_service %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "✅ Дозування pH завершено. Поточний pH: {% raw %}{{ states('{{ ph_sensor }}') }}{% endraw %}."
+    {% endif %}
+  max_exceeded: silent

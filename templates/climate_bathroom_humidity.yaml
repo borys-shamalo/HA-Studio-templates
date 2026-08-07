@@ -1,0 +1,94 @@
+id: climate_bathroom_humidity
+category: climate
+tier: free
+title:
+  uk: Автоматична витяжка у ванній
+  en: Automatic Bathroom Exhaust Fan
+description:
+  uk: Вмикає витяжку при підвищенні вологості та автоматично вимикає за таймером.
+  en: Turns on exhaust fan on high humidity and turns off automatically on a timer.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Витяжка у ванній
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: humidity_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик вологості (%)
+        en: Humidity Sensor (%)
+    - id: humidity_threshold
+      type: number
+      required: true
+      min: 40
+      max: 100
+      default: 70
+      label:
+        uk: Поріг вмикання (%)
+        en: Activation Threshold (%)
+    - id: exhaust_fan
+      type: entity_id
+      allowed_domains:
+        - switch
+        - fan
+      required: true
+      label:
+        uk: Вентилятор (Витяжка)
+        en: Exhaust Fan
+    - id: run_minutes
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 15
+      label:
+        uk: Час роботи після падіння вологості (хв)
+        en: Run time after humidity drops (min)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Керування витяжкою за вологістю."
+  mode: restart
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ humidity_sensor }}
+      above: {{ humidity_threshold }}
+  action:
+    - service: "{{ 'fan.turn_on' if 'fan.' in exhaust_fan else 'switch.turn_on' }}"
+      target:
+        entity_id: {{ exhaust_fan }}
+    - wait_for_trigger:
+        - platform: numeric_state
+          entity_id: {{ humidity_sensor }}
+          below: {{ humidity_threshold - 5 }}
+    - delay:
+        minutes: {{ run_minutes }}
+    - service: "{{ 'fan.turn_off' if 'fan.' in exhaust_fan else 'switch.turn_off' }}"
+      target:
+        entity_id: {{ exhaust_fan }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Автоматична витяжка у ванній"
+    {% endif %}

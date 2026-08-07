@@ -1,0 +1,106 @@
+id: climate_smart_thermostat_cooldown
+category: climate
+tier: pro_only
+title:
+  uk: Розумний термостат із захистом реле (Cooldown)
+  en: Smart Thermostat with Relay Protection
+description:
+  uk: Керує обігрівом із захистом від занадто частого перемикання (cooldown) для продовження
+    терміну служби реле.
+  en: Controls heating with a cooldown mechanism to prevent rapid relay toggling.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Розумний термостат
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: temp_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик температури
+        en: Temperature Sensor
+    - id: heater_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле обігрівача
+        en: Heater Switch
+    - id: target_temp
+      type: number
+      required: true
+      min: 5
+      max: 35
+      default: 22
+      label:
+        uk: Цільова температура (°C)
+        en: Target Temperature (°C)
+    - id: cooldown_minutes
+      type: number
+      required: true
+      min: 1
+      max: 60
+      default: 5
+      label:
+        uk: Мінімальний час між перемиканнями (хв)
+        en: Minimum time between toggles (min)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Термостат із cooldown."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ temp_sensor }}
+      below: {{ target_temp - 0.5 }}
+      for:
+        minutes: {{ cooldown_minutes }}
+      id: "too_cold"
+    - platform: numeric_state
+      entity_id: {{ temp_sensor }}
+      above: {{ target_temp + 0.5 }}
+      for:
+        minutes: {{ cooldown_minutes }}
+      id: "too_hot"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "too_cold"
+          sequence:
+            - service: switch.turn_on
+              target:
+                entity_id: {{ heater_switch }}
+        - conditions:
+            - condition: trigger
+              id: "too_hot"
+          sequence:
+            - service: switch.turn_off
+              target:
+                entity_id: {{ heater_switch }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Розумний термостат із захистом реле (Cooldown)"
+    {% endif %}

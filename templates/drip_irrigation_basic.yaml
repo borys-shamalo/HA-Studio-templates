@@ -1,0 +1,108 @@
+id: drip_irrigation_basic
+category: irrigation
+tier: pack_only
+title:
+  uk: Капельний полив за розкладом
+  en: Scheduled Drip Irrigation with Water Level Check
+description:
+  uk: Вмикає насос капельного поливу за розкладом із перевіркою рівня води в баку
+    та аварійним тайм-аутом.
+  en: Turns on drip irrigation pump on schedule with water tank level check and safety
+    timeout.
+form_schema:
+  fields:
+    - id: automation_title
+      type: string
+      required: true
+      default: Капельний полив за розкладом
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: pump_switch
+      type: entity_id
+      allowed_domains:
+        - switch
+      required: true
+      label:
+        uk: Реле насоса поливу
+        en: Irrigation Pump Switch
+    - id: water_level_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик рівня води в баку
+        en: Water Tank Level Sensor
+    - id: schedule_time
+      type: string
+      required: true
+      default: 06:00:00
+      label:
+        uk: Час запуску поливу (HH:MM:SS)
+        en: Irrigation Start Time (HH:MM:SS)
+    - id: duration_minutes
+      type: number
+      required: true
+      min: 1
+      max: 120
+      default: 30
+      label:
+        uk: Тривалість поливу (хвилини)
+        en: Irrigation Duration (minutes)
+    - id: max_run_minutes
+      type: number
+      required: true
+      min: 5
+      max: 180
+      default: 45
+      label:
+        uk: Аварійний тайм-аут (хвилини)
+        en: Safety Timeout (minutes)
+    - id: enable_telegram
+      type: boolean
+      default: true
+      label:
+        uk: Надсилати сповіщення у Telegram
+        en: Send Telegram Notification
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service Name
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Капельний полив за розкладом із перевіркою рівня води."
+  mode: single
+  trigger:
+    - platform: time
+      at: "{{ schedule_time }}"
+  condition:
+    - condition: state
+      entity_id: {{ water_level_sensor }}
+      state: "on"
+  action:
+    {% if enable_telegram and telegram_notify_service %}
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🌱 Капельний полив розпочато ({{ duration_minutes }} хв)."
+    {% endif %}
+    {% endif %}
+    - service: switch.turn_on
+      target:
+        entity_id: {{ pump_switch }}
+    - delay:
+        minutes: {{ duration_minutes }}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ pump_switch }}
+    {% if enable_telegram and telegram_notify_service %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "✅ Капельний полив завершено."
+    {% endif %}
+  max_exceeded: silent

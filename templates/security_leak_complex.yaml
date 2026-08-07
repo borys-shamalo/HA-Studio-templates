@@ -1,0 +1,81 @@
+id: security_leak_complex
+category: security
+tier: pro_only
+title:
+  uk: Комплексний захист від протікання з TTS
+  en: Complex Leak Protection with TTS
+description:
+  uk: Закриває кран, кричить через смарт-колонку та надсилає фото в Telegram.
+  en: Shuts valve, announces on smart speaker, and sends Telegram alert.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Тотальний захист від потопу
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: leak_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик протікання
+        en: Leak Sensor
+    - id: water_valve
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Водяний кран
+        en: Water Valve
+    - id: media_player
+      type: entity_id
+      allowed_domains:
+        - media_player
+      required: true
+      label:
+        uk: Смарт-колонка (для голосового алерта)
+        en: Smart Speaker (for TTS)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Комплексне реагування на протікання води (Кран + Голос + Telegram)."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ leak_sensor }}
+      to: "on"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: {{ water_valve }}
+    - service: tts.google_translate_say
+      target:
+        entity_id: {{ media_player }}
+      data:
+        message: "Увага! Виявлено протікання води. Кран автоматично перекрито."
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🌊 АВАРІЯ! Виявлено протікання води! Водопостачання перекрито."
+
+    {% endif %}

@@ -1,0 +1,109 @@
+id: climate_night_setback
+category: climate
+tier: free
+title:
+  uk: Нічний режим кондиціонера/опалення
+  en: Night Setback for HVAC
+description:
+  uk: Автоматично змінює цільову температуру на нічну та повертає на денну зранку.
+  en: Automatically changes target temperature for night and restores it in the morning.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Нічний клімат
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: climate_entity
+      type: entity_id
+      allowed_domains:
+        - climate
+      required: true
+      label:
+        uk: Термостат/Кондиціонер
+        en: Climate Entity
+    - id: night_time
+      type: time
+      required: true
+      default: '22:30:00'
+      label:
+        uk: Час увімкнення нічного режиму
+        en: Night Mode Start Time
+    - id: night_temp
+      type: number
+      required: true
+      min: 10
+      max: 30
+      default: 19
+      label:
+        uk: Нічна температура (°C)
+        en: Night Temperature (°C)
+    - id: day_time
+      type: time
+      required: true
+      default: 07:00:00
+      label:
+        uk: Час повернення до денного режиму
+        en: Day Mode Start Time
+    - id: day_temp
+      type: number
+      required: true
+      min: 10
+      max: 30
+      default: 22
+      label:
+        uk: Денна температура (°C)
+        en: Day Temperature (°C)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Автоматична зміна температури на ніч."
+  mode: single
+  trigger:
+    - platform: time
+      at: "{{ night_time }}"
+      id: "night"
+    - platform: time
+      at: "{{ day_time }}"
+      id: "day"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "night"
+          sequence:
+            - service: climate.set_temperature
+              target:
+                entity_id: {{ climate_entity }}
+              data:
+                temperature: {{ night_temp }}
+        - conditions:
+            - condition: trigger
+              id: "day"
+          sequence:
+            - service: climate.set_temperature
+              target:
+                entity_id: {{ climate_entity }}
+              data:
+                temperature: {{ day_temp }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Нічний режим кондиціонера/опалення"
+    {% endif %}

@@ -1,0 +1,79 @@
+id: irrigation_filter_flush
+category: irrigation
+tier: free
+title:
+  uk: Промивка фільтрів
+  en: Filter Flush
+description:
+  uk: Короткочасне увімкнення дренажного клапана для очищення системи за розкладом.
+  en: Short activation of drainage valve to flush the system on a schedule.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Промивка фільтрів
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: flush_valve
+      type: entity_id
+      allowed_domains:
+        - switch
+        - valve
+      required: true
+      label:
+        uk: Клапан промивки
+        en: Flush Valve
+    - id: schedule_time
+      type: time
+      required: true
+      default: 08:00:00
+      label:
+        uk: Час промивки
+        en: Flush Time
+    - id: flush_seconds
+      type: number
+      required: true
+      min: 5
+      max: 300
+      default: 15
+      label:
+        uk: Тривалість промивки (секунди)
+        en: Flush Duration (seconds)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Щоденна промивка фільтрів води."
+  mode: single
+  trigger:
+    - platform: time
+      at: "{{ schedule_time }}"
+  action:
+    - service: switch.turn_on
+      target:
+        entity_id: {{ flush_valve }}
+    - delay:
+        seconds: {{ flush_seconds }}
+    - service: switch.turn_off
+      target:
+        entity_id: {{ flush_valve }}
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Промивка фільтрів"
+    {% endif %}

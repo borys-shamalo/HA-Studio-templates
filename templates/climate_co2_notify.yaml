@@ -1,0 +1,62 @@
+id: climate_co2_notify
+category: climate
+tier: free
+title:
+  uk: Сповіщення про необхідність провітрювання
+  en: CO2 Ventilation Notification
+description:
+  uk: Індикація або сповіщення, коли рівень CO₂ перевищує 1000 ppm.
+  en: Indication or notification when CO2 levels exceed 1000 ppm.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Моніторинг CO2
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: co2_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Датчик CO2
+        en: CO2 Sensor
+    - id: co2_threshold
+      type: number
+      required: true
+      default: 1000
+      label:
+        uk: Поріг CO2 (ppm)
+        en: CO2 Threshold (ppm)
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Сповіщення про високий рівень CO2."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ co2_sensor }}
+      above: {{ co2_threshold }}
+  action:
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "🌬️ Увага! Рівень CO2 перевищив норму ({% raw %}{{ states('{{ co2_sensor }}') }}{% endraw %} ppm). Рекомендується провітрити приміщення."
+
+    {% endif %}

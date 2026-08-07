@@ -1,0 +1,88 @@
+id: energy_inverter_solar_control
+category: energy
+tier: pro_only
+title:
+  uk: Контроль генератора / сонячного інвертора
+  en: Inverter / Solar Generator Control
+description:
+  uk: Перемикає режим інвертора на Grid/Utility, коли потужність сонячних панелей
+    падає.
+  en: Switches inverter mode to Grid/Utility when solar panel power drops.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Керування режимом інвертора
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: solar_power_sensor
+      type: entity_id
+      allowed_domains:
+        - sensor
+      required: true
+      label:
+        uk: Потужність панелей (Вт)
+        en: Solar Power Sensor (W)
+    - id: power_threshold
+      type: number
+      required: true
+      min: 10
+      max: 1000
+      default: 100
+      label:
+        uk: Поріг падіння потужності (Вт)
+        en: Power Drop Threshold (W)
+    - id: inverter_mode_select
+      type: entity_id
+      allowed_domains:
+        - select
+        - input_select
+      required: true
+      label:
+        uk: Селектор режиму інвертора
+        en: Inverter Mode Selector
+    - id: grid_mode_option
+      type: string
+      required: true
+      default: Utility
+      label:
+        uk: Опція режиму Мережа (Grid)
+        en: Grid Mode Option
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service
+jinja_yaml_template: |-
+  alias: "{{ automation_title }}"
+  description: "Перемикання інвертора на мережу при низькому сонці."
+  mode: single
+  trigger:
+    - platform: numeric_state
+      entity_id: {{ solar_power_sensor }}
+      below: {{ power_threshold }}
+      for:
+        minutes: 10
+  action:
+    - service: select.select_option
+      target:
+        entity_id: {{ inverter_mode_select }}
+      data:
+        option: "{{ grid_mode_option }}"
+
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "Спрацювала автоматизація: Контроль генератора / сонячного інвертора"
+    {% endif %}

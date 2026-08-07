@@ -1,0 +1,74 @@
+id: energy_220v_telegram
+category: energy
+tier: free
+title:
+  uk: Сповіщення про знеструмлення (220В)
+  en: 220V Power Outage Notification
+description:
+  uk: Надсилає повідомлення у Telegram при зникненні та відновленні напруги 220В.
+  en: Sends Telegram notifications when 220V grid power is lost and restored.
+form_schema:
+  fields:
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: false
+      label:
+        uk: Надсилати сповіщення в Telegram
+        en: Send Telegram Notification
+    - id: automation_title
+      type: string
+      required: true
+      default: Контроль напруги 220В
+      label:
+        uk: Назва автоматизації
+        en: Automation Title
+    - id: grid_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+        - sensor
+      required: true
+      label:
+        uk: Датчик наявності мережі
+        en: Grid Power Sensor
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: notify.telegram
+      label:
+        uk: Ім'я notify-сервісу Telegram
+        en: Telegram Notify Service Name
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Сповіщення про знеструмлення (220В)."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ grid_sensor }}
+      from: "on"
+      to: "off"
+      id: "power_off"
+    - platform: state
+      entity_id: {{ grid_sensor }}
+      from: "off"
+      to: "on"
+      id: "power_on"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "power_off"
+          sequence:
+            {% if enable_telegram %}
+            - service: {{ telegram_notify_service }}
+              data:
+                message: "🔴 УВАГА! Зникла напруга 220В!"
+            {% endif %}
+        - conditions:
+            - condition: trigger
+              id: "power_on"
+          sequence:
+            - service: {{ telegram_notify_service }}
+              data:
+                message: "🟢 Світло є! Відновлено напругу 220В."
