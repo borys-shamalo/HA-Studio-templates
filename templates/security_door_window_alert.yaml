@@ -1,0 +1,66 @@
+id: security_door_window_alert
+category: security
+tier: free
+title:
+  uk: "Сповіщення про відкрите вікно/двері"
+  en: "Open Window/Door Alert"
+description:
+  uk: "Надсилає сповіщення, якщо двері або вікно залишаються відкритими довше заданого часу."
+  en: "Sends a notification if a door or window is left open longer than a specified time."
+form_schema:
+  fields:
+    - id: automation_title
+      type: string
+      required: true
+      default: "Сповіщення про відкрите вікно"
+      label:
+        uk: "Назва автоматизації"
+        en: "Automation Title"
+    - id: door_sensor
+      type: entity_id
+      allowed_domains:
+        - binary_sensor
+      required: true
+      label:
+        uk: "Датчик відкриття (вікно/двері)"
+        en: "Contact Sensor (Window/Door)"
+    - id: open_minutes
+      type: number
+      required: true
+      min: 1
+      max: 120
+      default: 5
+      label:
+        uk: "Час очікування (хвилин)"
+        en: "Wait time (minutes)"
+    - id: enable_telegram
+      type: boolean
+      required: false
+      default: true
+      label:
+        uk: "Надсилати сповіщення в Telegram"
+        en: "Send Telegram Notification"
+    - id: telegram_notify_service
+      type: string
+      required: false
+      default: "notify.telegram"
+      label:
+        uk: "Ім'я notify-сервісу Telegram"
+        en: "Telegram Notify Service"
+
+jinja_yaml_template: |
+  alias: "{{ automation_title }}"
+  description: "Сповіщення, якщо вікно або двері довго відкриті."
+  mode: single
+  trigger:
+    - platform: state
+      entity_id: {{ door_sensor }}
+      to: "on"
+      for:
+        minutes: {{ open_minutes }}
+  action:
+    {% if enable_telegram %}
+    - service: {{ telegram_notify_service }}
+      data:
+        message: "⚠️ УВАГА! Датчик зафіксував відкриття більше ніж на {{ open_minutes }} хвилин!"
+    {% endif %}
